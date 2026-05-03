@@ -43,6 +43,7 @@
 
 #include "StdAfx.h"
 #include "WorldBuilder.h"
+#include "ShapeFillTool.h"
 
 #include "WorldBuilderDoc.h"
 #include "WorldBuilderView.h"
@@ -405,6 +406,8 @@ void CWorldBuilderView::OnPaint()
 			pMapObj = pMapObj->getNext();
 		}
 	}
+
+	ShapeFillTool::drawOverlayStatic(&dc, this);
 
 }
 

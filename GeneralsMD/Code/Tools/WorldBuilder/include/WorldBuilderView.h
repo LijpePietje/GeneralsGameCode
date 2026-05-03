@@ -45,6 +45,8 @@ public:
 	//{{AFX_VIRTUAL(CWorldBuilderView)
 	public:
 	virtual BOOL PreCreateWindow(CREATESTRUCT& cs) override;
+	virtual Int getScrollOffsetX() const override { return mXScrollOffset; }
+	virtual Int getScrollOffsetY() const override { return mYScrollOffset; }
 	protected:
 	virtual BOOL OnPreparePrinting(CPrintInfo* pInfo) override;
 	virtual void OnBeginPrinting(CDC* pDC, CPrintInfo* pInfo) override;

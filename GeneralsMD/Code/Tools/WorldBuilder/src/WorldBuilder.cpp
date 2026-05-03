@@ -230,6 +230,7 @@ CWorldBuilderApp::CWorldBuilderApp() :
 	m_tools[22] = &m_scorchTool;
 	m_tools[23] = &m_borderTool;
 	m_tools[24] = &m_rulerTool;
+	m_tools[25] = &m_shapeFillTool;
 
 	// set up initial values.
 	m_brushTool.setHeight(16);

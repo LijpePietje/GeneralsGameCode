@@ -35,6 +35,8 @@
 #include "playerlistdlg.h"
 #include "teamsdialog.h"
 #include "LayersList.h"
+#include "ShapeFillTool.h"
+#include "wbview3d.h"
 
 Bool WbView::m_snapToGrid = false;
 
@@ -180,7 +182,10 @@ void WbView::mouseDown(TTrackingMode m, CPoint viewPt)
 	m_mouseDownPoint = viewPt;
 	viewToDocCoords(viewPt, &m_mouseDownDocPoint);
 	m_trackingMode = m;
-	WbApp()->updateCurTool(m == TRACK_R || m == TRACK_M);
+	// ShapeFillTool handles right-click in 2D only; 3D view keeps standard behavior.
+	Bool is3DView = (dynamic_cast<WbView3d*>(this) != nullptr);
+	Bool forceHand = (m == TRACK_R || m == TRACK_M) && (!ShapeFillTool::isActive() || is3DView);
+	WbApp()->updateCurTool(forceHand);
 	WbApp()->lockCurTool();
 	// If we have a tool, invoke it's mouse down method.
 	if (WbApp()->getCurTool()) {
@@ -465,6 +470,10 @@ BOOL WbView::OnSetCursor(CWnd* pWnd, UINT nHitTest, UINT message)
 /** Handles the delete menu action. */
 void WbView::OnEditDelete()
 {
+	if (ShapeFillTool::isActive()) {
+		ShapeFillTool::deleteSelectedShape(); // no-op if nothing selected
+		return;
+	}
 	if (PolygonTool::isActive() || m_showPolygonTriggers) {
 		if (PolygonTool::deleteSelectedPolygon()) {
 			return;

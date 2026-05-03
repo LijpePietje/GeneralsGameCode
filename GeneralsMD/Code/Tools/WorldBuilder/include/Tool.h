@@ -76,6 +76,7 @@ public:
 	virtual void mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWorldBuilderDoc *pDoc) {}
 	virtual void mouseUp(TTrackingMode m, CPoint viewPt, WbView* pView, CWorldBuilderDoc *pDoc) {}
 	virtual WorldHeightMapEdit *getHeightMap() {return nullptr;}
+	virtual void drawOverlay(CDC* /*pDC*/, WbView* /*pView*/) {}
 
 	static Real calcRoundBlendFactor(CPoint center, Int x, Int y, Int brushWidth, Int featherWidth);
 	static Real calcSquareBlendFactor(CPoint center, Int x, Int y, Int brushWidth, Int featherWidth);

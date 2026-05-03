@@ -52,6 +52,7 @@
 #include "RampTool.h"
 #include "ScorchTool.h"
 #include "RulerTool.h"
+#include "ShapeFillTool.h"
 #include "Common/Debug.h"
 
 /////////////////////////////////////////////////////////////////////////////
@@ -94,7 +95,7 @@ public:
 
 protected:
 
-	enum {NUM_VIEW_TOOLS=25};
+	enum {NUM_VIEW_TOOLS=26};
 
 	Tool							*m_tools[NUM_VIEW_TOOLS]; ///< array of tool pointers.
 	Tool							*m_curTool;   ///< Currently active tool.
@@ -124,6 +125,7 @@ protected:
 	ScorchTool				m_scorchTool;				///< Scorch tool.
 	BorderTool				m_borderTool;				///< Border tool.
 	RulerTool					m_rulerTool;				///< Ruler tool.
+	ShapeFillTool			m_shapeFillTool;		///< Shape fill tool.
 
 	Int								m_lockCurTool;
 

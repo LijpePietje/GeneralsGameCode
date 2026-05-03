@@ -264,6 +264,12 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	if (m_optionsPanelWidth < frameRect.Width()) m_optionsPanelWidth = frameRect.Width();
 	if (m_optionsPanelHeight < frameRect.Height()) m_optionsPanelHeight = frameRect.Height();
 
+	m_shapeFillOptions.Create(IDD_SHAPE_FILL_OPTIONS, this);
+	m_shapeFillOptions.SetWindowPos(nullptr, frameRect.left, frameRect.top, 0, 0, SWP_NOZORDER|SWP_NOSIZE);
+	m_shapeFillOptions.GetWindowRect(&frameRect);
+	if (m_optionsPanelWidth < frameRect.Width()) m_optionsPanelWidth = frameRect.Width();
+	if (m_optionsPanelHeight < frameRect.Height()) m_optionsPanelHeight = frameRect.Height();
+
 	frameRect.top = ::AfxGetApp()->GetProfileInt(GLOBALLIGHT_OPTIONS_PANEL_SECTION, "Top", frameRect.top);
 	frameRect.left =::AfxGetApp()->GetProfileInt(GLOBALLIGHT_OPTIONS_PANEL_SECTION, "Left", frameRect.left);
 
@@ -396,6 +402,7 @@ void CMainFrame::showOptionsDialog(Int dialogID)
 		case IDD_RAMP_OPTIONS:newOptions = &m_rampOptions; break;
 		case IDD_SCORCH_OPTIONS:newOptions = &m_scorchOptions; break;
 		case IDD_NO_OPTIONS:newOptions  = &m_noOptions; break;
+		case IDD_SHAPE_FILL_OPTIONS:newOptions = &m_shapeFillOptions; break;
 		default : break;
 	}
 	CRect frameRect;

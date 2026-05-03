@@ -92,6 +92,8 @@
 #include "GlobalLightOptions.h"
 #include "LayersList.h"
 #include "ImpassableOptions.h"
+#include "ShapeFillTool.h"
+#include "ShapeFillOptions.h"
 
 
 #include <d3dx8.h>
@@ -2649,6 +2651,8 @@ void WbView3d::drawLabels(HDC hdc)
 			}
 		}
 	}
+
+	ShapeFillTool::drawOverlayStatic(nullptr, this);
 }
 
 
@@ -2891,11 +2895,22 @@ void WbView3d::OnViewShowtopdownview()
 	m_heightMapRenderObj->setFlattenHeights(m_projection);
 	invalObjectInView(nullptr);
 	::AfxGetApp()->WriteProfileInt(MAIN_FRAME_SECTION, "ShowTopDownView", m_projection?1:0);
+	ShapeFillOptions::updateTopDownState();
 }
 
 void WbView3d::OnUpdateViewShowtopdownview(CCmdUI* pCmdUI)
 {
 	pCmdUI->SetCheck(m_projection?1:0);
+}
+
+void WbView3d::setTopDownProjection(bool enable)
+{
+	if (m_projection == enable) return;
+	m_projection = enable;
+	if (m_heightMapRenderObj) m_heightMapRenderObj->setFlattenHeights(m_projection);
+	invalObjectInView(nullptr);
+	::AfxGetApp()->WriteProfileInt(MAIN_FRAME_SECTION, "ShowTopDownView", m_projection?1:0);
+	ShapeFillOptions::updateTopDownState();
 }
 
 void WbView3d::OnViewShowclouds()

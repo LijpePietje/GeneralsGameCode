@@ -575,6 +575,38 @@
 #define IDC_STATIC_MAPOBJECT_SOUND      1381
 #define IDC_STATIC_MAPOBJECT_VISUAL     1382
 #define IDC_MAPOBJECT_DISTANCE          1383
+
+// ShapeFillTool resource IDs
+#define IDD_SHAPE_FILL_OPTIONS          240
+#define ID_SHAPE_FILL_TOOL              33347
+#define IDC_SF_MODE_RECT                1384
+#define IDC_SF_MODE_CIRCLE              1385
+#define IDC_SF_MODE_POLYGON             1386
+#define IDC_SF_MODE_SELECT              1387
+#define IDC_SF_FINISH_POLY              1388
+#define IDC_SF_INNER_HEIGHT_EDIT        1389
+#define IDC_SF_INNER_HEIGHT_POPUP       1390
+#define IDC_SF_OUTER_HEIGHT_EDIT        1391
+#define IDC_SF_OUTER_HEIGHT_POPUP       1392
+#define IDC_SF_BORDER_WIDTH_EDIT        1393
+#define IDC_SF_BORDER_WIDTH_POPUP       1394
+#define IDC_SF_INNER_TEX_BTN            1395
+#define IDC_SF_BORDER_TEX_BTN           1396
+#define IDC_SF_AUTO_BLEND               1397
+#define IDC_SF_APPLY_BTN                1398
+#define IDC_SF_COPY_BTN                 1399
+#define IDC_SF_PASTE_BTN                1400
+#define IDC_SF_FLIP_H_BTN               1401
+#define IDC_SF_FLIP_V_BTN               1402
+#define IDC_SF_DELETE_BTN               1403
+#define IDC_SF_COORDS_LABEL             1404
+#define IDC_SF_SHAPE_LIST               1405
+#define IDC_SF_TOPDOWN_BTN              1406
+#define IDC_SF_MODE_LINE                1407
+#define IDC_SF_MODE_FILL                1408
+#define IDC_SF_CLEAR_LINES              1409
+#define IDC_SF_3D_BTN                   1410
+
 #define ID_BRUSH_TOOL                   32771
 #define IDM_ShowGrid                    32772
 #define ID_FEATHERTOOL                  32791

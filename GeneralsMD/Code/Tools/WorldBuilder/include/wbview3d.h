@@ -258,6 +258,8 @@ public:
 	virtual void setDefaultCamera() override;
 	virtual void rotateCamera(Real delta) override;
 	virtual void pitchCamera(Real delta) override;
+	bool getTopDownProjection(void) const { return m_projection; }
+	void setTopDownProjection(bool enable);
 	void setCameraPitch(Real absolutePitch);
 	Real getCameraPitch();
 	Real getCurrentZoom(); //WST 10/17/2002

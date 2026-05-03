@@ -46,6 +46,7 @@
 #include "ScorchOptions.h"
 #include "BuildList.h"
 #include "RulerOptions.h"
+#include "ShapeFillOptions.h"
 
 #define TWO_D_WINDOW_SECTION "TwoDWindow"
 #define MAIN_FRAME_SECTION "MainFrame"
@@ -111,6 +112,7 @@ protected:  // control bar embedded members
 	GroveOptions				m_groveOptions;
 	RampOptions					m_rampOptions;
 	ScorchOptions				m_scorchOptions;
+	ShapeFillOptions		m_shapeFillOptions;
 	COptionsPanel				m_noOptions;
 	GlobalLightOptions	m_globalLightOptions;
 	CameraOptions				m_cameraOptions;
