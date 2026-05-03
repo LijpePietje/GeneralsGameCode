@@ -70,6 +70,7 @@ static void rasterizeSegmentToEdges(Int cx0, Int cy0, Int cx1, Int cy1,
 	std::vector<bool>& hEdge, std::vector<bool>& vEdge, Int playW, Int playH);
 static void drawSegmentStaircase(CDC* pDC, WbView* pView, Int cx0, Int cy0, Int cx1, Int cy1);
 static void drawCircleStaircase(CDC* pDC, WbView* pView, Int cx, Int cy, Int r);
+static std::vector<ShapeVertex> insetPolygon(const std::vector<ShapeVertex>& pts, Real amount);
 
 // -------------------------------------------------------------------------
 // Helper: invalidate both 2D and 3D views so the overlay redraws everywhere
@@ -240,13 +241,16 @@ void ShapeFillTool::mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWo
 	}
 
 	if (m_mode == SF_DRAW_POLYGON) {
+		// Snap to grid corners (same as Line tool) so barriers align exactly with visuals
+		Int cx, cy;
+		viewToCorner(pView, viewPt, cx, cy);
 		if (!m_polyDrawing) {
 			m_polyDrawing = true;
 			m_polyDraft.clear();
 		}
-		// Close polygon if clicking near first point (within 3 tiles) and have 3+ pts
+		// Close polygon if clicking near first corner (within 3 corner-units) and have 3+ pts
 		if (m_polyDrawing && m_polyDraft.size() >= 3) {
-			Int dx = tx - m_polyDraft[0].tx, dy = ty - m_polyDraft[0].ty;
+			Int dx = cx - m_polyDraft[0].tx, dy = cy - m_polyDraft[0].ty;
 			if (dx*dx + dy*dy <= 9) {
 				finishPolygon();
 				ShapeFillOptions::updateFromTool();
@@ -254,7 +258,7 @@ void ShapeFillTool::mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWo
 				return;
 			}
 		}
-		m_polyDraft.push_back({tx, ty});
+		m_polyDraft.push_back({cx, cy});
 		ShapeFillOptions::updateFromTool();  // refreshes Close Polygon button visibility
 		invalidateBothViews();
 		return;
@@ -331,6 +335,22 @@ void ShapeFillTool::mouseMoved(TTrackingMode m, CPoint viewPt, WbView* pView, CW
 		invalidateBothViews();
 		return;
 	}
+
+	// Polygon mode: same snap + rubber band as line tool
+	if (m_mode == SF_DRAW_POLYGON) {
+		Int cx, cy;
+		viewToCorner(pView, viewPt, cx, cy);
+		const Int SNAP_R2 = 5 * 5;
+		// Snap to first draft point to give closing visual feedback
+		if (m_polyDrawing && m_polyDraft.size() >= 3) {
+			Int dx = cx - m_polyDraft[0].tx, dy = cy - m_polyDraft[0].ty;
+			if (dx*dx + dy*dy <= SNAP_R2) { cx = m_polyDraft[0].tx; cy = m_polyDraft[0].ty; }
+		}
+		m_snapCx = cx; m_snapCy = cy; m_hasSnapCorner = true;
+		invalidateBothViews();
+		return;
+	}
+
 	m_hasSnapCorner = false;
 
 	if (m_mode == SF_SELECT) {
@@ -732,11 +752,11 @@ void ShapeFillTool::bucketFill(CWorldBuilderDoc* pDoc, Int startTx, Int startTy)
 		}
 	}
 
-	// Build barriers from shape outlines — exactly matching their visual staircases.
-	// Polygon/rect: per-edge rasterizeSegmentToEdges (identical path to drawSegmentStaircase).
-	// Circle: block edges between inside and outside tiles (matches drawCircleStaircase).
+	// Build barriers from shape outlines — outer perimeter + inner perimeter (border/inner zone
+	// boundary). Both together let the fill tool click into each zone independently.
 	for (const auto& shape : m_shapes) {
 		if (shape.type == SHAPE_POLYGON && shape.points.size() >= 2) {
+			// Outer perimeter
 			for (Int i = 0; i < (Int)shape.points.size(); i++) {
 				Int j = (i + 1) % (Int)shape.points.size();
 				rasterizeSegmentToEdges(
@@ -744,18 +764,41 @@ void ShapeFillTool::bucketFill(CWorldBuilderDoc* pDoc, Int startTx, Int startTy)
 					shape.points[j].tx, shape.points[j].ty,
 					hEdge, vEdge, playW, playH);
 			}
+			// Inner perimeter (border-zone / inner-zone boundary)
+			if (shape.borderWidth > 0 && shape.points.size() >= 3) {
+				std::vector<ShapeVertex> inner = insetPolygon(shape.points, (Real)shape.borderWidth);
+				if ((Int)inner.size() >= 3) {
+					for (Int i = 0; i < (Int)inner.size(); i++) {
+						Int j = (i + 1) % (Int)inner.size();
+						rasterizeSegmentToEdges(
+							inner[i].tx, inner[i].ty,
+							inner[j].tx, inner[j].ty,
+							hEdge, vEdge, playW, playH);
+					}
+				}
+			}
 		} else if (shape.type == SHAPE_RECT) {
 			Int x0 = std::min(shape.x0, shape.x1), x1 = std::max(shape.x0, shape.x1);
 			Int y0 = std::min(shape.y0, shape.y1), y1 = std::max(shape.y0, shape.y1);
+			// Outer perimeter
 			rasterizeSegmentToEdges(x0, y0, x1, y0, hEdge, vEdge, playW, playH);
 			rasterizeSegmentToEdges(x1, y0, x1, y1, hEdge, vEdge, playW, playH);
 			rasterizeSegmentToEdges(x1, y1, x0, y1, hEdge, vEdge, playW, playH);
 			rasterizeSegmentToEdges(x0, y1, x0, y0, hEdge, vEdge, playW, playH);
+			// Inner perimeter
+			Int bw = shape.borderWidth;
+			if (bw > 0 && (x1 - x0) > 2 * bw && (y1 - y0) > 2 * bw) {
+				rasterizeSegmentToEdges(x0+bw, y0+bw, x1-bw, y0+bw, hEdge, vEdge, playW, playH);
+				rasterizeSegmentToEdges(x1-bw, y0+bw, x1-bw, y1-bw, hEdge, vEdge, playW, playH);
+				rasterizeSegmentToEdges(x1-bw, y1-bw, x0+bw, y1-bw, hEdge, vEdge, playW, playH);
+				rasterizeSegmentToEdges(x0+bw, y1-bw, x0+bw, y0+bw, hEdge, vEdge, playW, playH);
+			}
 		} else if (shape.type == SHAPE_CIRCLE) {
 			auto insideCircle = [&](Int tx, Int ty) -> bool {
 				float px = (float)(tx - shape.cx), py = (float)(ty - shape.cy);
 				return px*px + py*py <= (float)shape.r * shape.r;
 			};
+			// Outer perimeter
 			for (Int ty = shape.cy - shape.r - 1; ty <= shape.cy + shape.r + 1; ty++) {
 				for (Int tx = shape.cx - shape.r - 1; tx <= shape.cx + shape.r + 1; tx++) {
 					if (tx < 0 || ty < 0 || tx >= playW || ty >= playH) continue;
@@ -764,6 +807,24 @@ void ShapeFillTool::bucketFill(CWorldBuilderDoc* pDoc, Int startTx, Int startTy)
 					if (tx > 0          && !insideCircle(tx - 1, ty)) vEdge[ty * playW + (tx - 1)] = true;
 					if (ty + 1 < playH  && !insideCircle(tx, ty + 1)) hEdge[ty * playW + tx]       = true;
 					if (ty > 0          && !insideCircle(tx, ty - 1)) hEdge[(ty - 1) * playW + tx] = true;
+				}
+			}
+			// Inner perimeter
+			Int innerR = shape.r - shape.borderWidth;
+			if (innerR > 0 && shape.borderWidth > 0) {
+				auto insideInner = [&](Int tx, Int ty) -> bool {
+					float px = (float)(tx - shape.cx), py = (float)(ty - shape.cy);
+					return px*px + py*py <= (float)innerR * innerR;
+				};
+				for (Int ty = shape.cy - innerR - 1; ty <= shape.cy + innerR + 1; ty++) {
+					for (Int tx = shape.cx - innerR - 1; tx <= shape.cx + innerR + 1; tx++) {
+						if (tx < 0 || ty < 0 || tx >= playW || ty >= playH) continue;
+						if (!insideInner(tx, ty)) continue;
+						if (tx + 1 < playW  && !insideInner(tx + 1, ty)) vEdge[ty * playW + tx]       = true;
+						if (tx > 0          && !insideInner(tx - 1, ty)) vEdge[ty * playW + (tx - 1)] = true;
+						if (ty + 1 < playH  && !insideInner(tx, ty + 1)) hEdge[ty * playW + tx]       = true;
+						if (ty > 0          && !insideInner(tx, ty - 1)) hEdge[(ty - 1) * playW + tx] = true;
+					}
 				}
 			}
 		}
@@ -1237,15 +1298,19 @@ void ShapeFillTool::drawOverlayStatic(CDC* /*pDC_unused*/, WbView* pView)
 		drawShape(pDC, pView, m_draftShape, true);
 	}
 
-	// Draw polygon draft
+	// Draw polygon draft as staircases along tile edges (mirrors line tool style)
 	if (m_polyDrawing && m_polyDraft.size() >= 1) {
 		CPen pen(PS_DOT, 1, RGB(100, 200, 255));
 		CPen* oldPen = pDC->SelectObject(&pen);
-		for (Int i = 0; i < (Int)m_polyDraft.size(); i++) {
-			Int sx, sy;
-			tileToView(pView, m_polyDraft[i].tx, m_polyDraft[i].ty, sx, sy);
-			if (i == 0) pDC->MoveTo(sx, sy);
-			else        pDC->LineTo(sx, sy);
+		pDC->SelectStockObject(NULL_BRUSH);
+		for (Int i = 1; i < (Int)m_polyDraft.size(); i++) {
+			drawSegmentStaircase(pDC, pView,
+				m_polyDraft[i-1].tx, m_polyDraft[i-1].ty,
+				m_polyDraft[i].tx,   m_polyDraft[i].ty);
+		}
+		Int sx, sy;
+		for (const auto& pt : m_polyDraft) {
+			cornerToView(pView, pt.tx, pt.ty, sx, sy);
 			drawHandle(pDC, sx, sy, true);
 		}
 		pDC->SelectObject(oldPen);
@@ -1302,6 +1367,14 @@ void ShapeFillTool::drawOverlayStatic(CDC* /*pDC_unused*/, WbView* pView)
 			pDC->SelectStockObject(NULL_BRUSH);
 			drawSegmentStaircase(pDC, pView,
 				m_lineDraft.back().tx, m_lineDraft.back().ty,
+				m_snapCx, m_snapCy);
+			pDC->SelectObject(oldPen);
+		} else if (m_polyDrawing && !m_polyDraft.empty()) {
+			CPen rubberPen(PS_DOT, 1, RGB(100, 200, 255));
+			CPen* oldPen = pDC->SelectObject(&rubberPen);
+			pDC->SelectStockObject(NULL_BRUSH);
+			drawSegmentStaircase(pDC, pView,
+				m_polyDraft.back().tx, m_polyDraft.back().ty,
 				m_snapCx, m_snapCy);
 			pDC->SelectObject(oldPen);
 		}
