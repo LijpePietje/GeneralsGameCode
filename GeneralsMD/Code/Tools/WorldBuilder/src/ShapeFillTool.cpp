@@ -553,6 +553,19 @@ void ShapeFillTool::applySelectedShape(CWorldBuilderDoc* pDoc)
 				needsOptimize = true;
 	}
 
+	// Auto-blend outer edge: creates engine-level texture blend tiles where the shape
+	// border meets surrounding terrain, softening the diagonal staircase visually.
+	// Uses the same mechanism as WorldBuilder's AutoEdgeOutTool (autoBlendOut).
+	// Activated by the "Auto Blend" checkbox — only the outer 2-tile ring is blended.
+	if (shape->autoBlendOuter && borderTex >= 0) {
+		for (const BorderTile& bt : tiles.border) {
+			Int hx = bt.pt.x + border, hy = bt.pt.y + border;
+			if (hx < 0 || hy < 0 || hx >= mapW || hy >= mapH) continue;
+			if (bt.dist < 2.0f)
+				htMapCopy->autoBlendOut(hx, hy);
+		}
+	}
+
 	if (needsOptimize)
 		htMapCopy->optimizeTiles();
 
