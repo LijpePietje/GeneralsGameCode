@@ -1495,18 +1495,17 @@ void ShapeFillTool::drawShape(CDC* pDC, WbView* pView, const ShapeDef& shape, Bo
 		} else if (shape.type == SHAPE_CIRCLE && shape.r > bw) {
 			drawCircleStaircase(pDC, pView, shape.cx, shape.cy, shape.r - bw);
 		} else if (shape.type == SHAPE_POLYGON && shape.points.size() >= 3) {
-			// Proper edge-offset inset (matches browser editor insetPolygon)
+			// Proper edge-offset inset drawn as staircases (matches outer polygon style)
 			std::vector<ShapeVertex> inset = insetPolygon(shape.points, (Real)bw);
-			if (inset.size() >= 3) {
-				Int sx0, sy0;
-				tileToView(pView, inset[0].tx, inset[0].ty, sx0, sy0);
-				pDC->MoveTo(sx0, sy0);
+			if ((Int)inset.size() >= 3) {
 				for (Int i = 1; i < (Int)inset.size(); i++) {
-					Int sx, sy;
-					tileToView(pView, inset[i].tx, inset[i].ty, sx, sy);
-					pDC->LineTo(sx, sy);
+					drawSegmentStaircase(pDC, pView,
+						inset[i-1].tx, inset[i-1].ty,
+						inset[i].tx,   inset[i].ty);
 				}
-				pDC->LineTo(sx0, sy0); // close
+				drawSegmentStaircase(pDC, pView,
+					inset.back().tx, inset.back().ty,
+					inset[0].tx,     inset[0].ty);
 			}
 		}
 		pDC->SelectObject(oldInner);
