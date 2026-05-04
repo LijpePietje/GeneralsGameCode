@@ -71,6 +71,7 @@ static void rasterizeSegmentToEdges(Int cx0, Int cy0, Int cx1, Int cy1,
 static void drawSegmentStaircase(CDC* pDC, WbView* pView, Int cx0, Int cy0, Int cx1, Int cy1);
 static void drawCircleStaircase(CDC* pDC, WbView* pView, Int cx, Int cy, Int r);
 static std::vector<ShapeVertex> insetPolygon(const std::vector<ShapeVertex>& pts, Real amount);
+static std::vector<ShapeVertex> getEffectiveInner(const ShapeDef& shape);
 
 // -------------------------------------------------------------------------
 // Helper: invalidate both 2D and 3D views so the overlay redraws everywhere
@@ -225,6 +226,46 @@ void ShapeFillTool::mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWo
 			m_moveStartTy    = ty;
 			return;
 		}
+		// Click near inner polygon edge → insert new inner vertex (click-to-add)
+		if (m_selectedId >= 0) {
+			ShapeDef* shape = findShape(m_selectedId);
+			if (shape && shape->type == SHAPE_POLYGON && shape->borderWidth > 0) {
+				auto inner = getEffectiveInner(*shape);
+				if ((Int)inner.size() >= 3) {
+					float closestD = FLT_MAX;
+					Int closestSeg = -1;
+					float closestT = 0;
+					Int m2 = (Int)inner.size();
+					for (Int i = 0; i < m2; i++) {
+						Int j = (i + 1) % m2;
+						float ax = (float)(inner[j].tx - inner[i].tx);
+						float ay = (float)(inner[j].ty - inner[i].ty);
+						float bx = (float)tx - inner[i].tx;
+						float by = (float)ty - inner[i].ty;
+						float len2 = ax*ax + ay*ay;
+						float t2 = (len2 > 0) ? std::max(0.0f, std::min(1.0f, (bx*ax + by*ay) / len2)) : 0.0f;
+						float dx2 = bx - t2*ax, dy2 = by - t2*ay;
+						float d = sqrtf(dx2*dx2 + dy2*dy2);
+						if (d < closestD) { closestD = d; closestSeg = i; closestT = t2; }
+					}
+					// Insert if within 2 tiles of edge but not already near a vertex handle
+					// (vertex handles use HIT_RADIUS=3; we only reach here if hitTestHandle failed)
+					if (closestD <= 2.0f && closestSeg >= 0 && closestT > 0.05f && closestT < 0.95f) {
+						if (shape->innerPoints.empty())
+							shape->innerPoints = inner;
+						Int j = (closestSeg + 1) % (Int)shape->innerPoints.size();
+						Int newTx = (Int)(shape->innerPoints[closestSeg].tx + closestT * (shape->innerPoints[j].tx - shape->innerPoints[closestSeg].tx));
+						Int newTy = (Int)(shape->innerPoints[closestSeg].ty + closestT * (shape->innerPoints[j].ty - shape->innerPoints[closestSeg].ty));
+						shape->innerPoints.insert(shape->innerPoints.begin() + j, {newTx, newTy});
+						m_resizingHandle = true;
+						m_activeHandle   = {HDL_INNER_VERTEX, shape->id, j, newTx, newTy};
+						invalidateBothViews();
+						return;
+					}
+				}
+			}
+		}
+
 		// Then check shape body for move
 		Int hitId = hitTestShape(tx, ty);
 		if (hitId >= 0) {
@@ -384,6 +425,21 @@ void ShapeFillTool::mouseMoved(TTrackingMode m, CPoint viewPt, WbView* pView, CW
 				if (vi >= 0 && vi < (Int)shape->points.size()) {
 					shape->points[vi].tx = tx;
 					shape->points[vi].ty = ty;
+					// Moving an outer vertex invalidates any free inner polygon
+					shape->innerPoints.clear();
+				}
+			}
+			else if (m_activeHandle.type == HDL_INNER_VERTEX) {
+				// Initialize innerPoints from computed inset on first drag
+				if (shape->innerPoints.empty()) {
+					auto inset = insetPolygon(shape->points, (Real)shape->borderWidth);
+					if ((Int)inset.size() >= 3)
+						shape->innerPoints = inset;
+				}
+				Int vi = m_activeHandle.vertexIdx;
+				if (vi >= 0 && vi < (Int)shape->innerPoints.size()) {
+					shape->innerPoints[vi].tx = tx;
+					shape->innerPoints[vi].ty = ty;
 				}
 			}
 			invalidateBothViews();
@@ -400,7 +456,8 @@ void ShapeFillTool::mouseMoved(TTrackingMode m, CPoint viewPt, WbView* pView, CW
 			} else if (shape->type == SHAPE_CIRCLE) {
 				shape->cx += dx; shape->cy += dy;
 			} else {
-				for (auto& pt : shape->points) { pt.tx += dx; pt.ty += dy; }
+				for (auto& pt : shape->points)      { pt.tx += dx; pt.ty += dy; }
+				for (auto& pt : shape->innerPoints) { pt.tx += dx; pt.ty += dy; }
 			}
 			invalidateBothViews();
 		}
@@ -532,11 +589,13 @@ void ShapeFillTool::applySelectedShape(CWorldBuilderDoc* pDoc)
 
 	// Apply border zone — distance-based gradient (like browser editor)
 	float bwf = (shape->borderWidth > 0) ? (float)shape->borderWidth : 1.0f;
+	// When a free inner polygon is active, bt.dist is already normalized [0,1].
+	bool hasInnerPoly = (shape->type == SHAPE_POLYGON && (Int)shape->innerPoints.size() >= 3);
 	for (const BorderTile& bt : tiles.border) {
 		Int hx = bt.pt.x + border, hy = bt.pt.y + border;
 		if (hx < 0 || hy < 0 || hx >= mapW || hy >= mapH) continue;
 		// t = 0 at outer edge, 1 at inner zone boundary
-		float t = std::max(0.0f, std::min(1.0f, bt.dist / bwf));
+		float t = hasInnerPoly ? bt.dist : std::max(0.0f, std::min(1.0f, bt.dist / bwf));
 		Int existingH = htMapCopy->getHeight(hx, hy);
 		Int h;
 		if (shape->autoBlendOuter) {
@@ -558,10 +617,12 @@ void ShapeFillTool::applySelectedShape(CWorldBuilderDoc* pDoc)
 	// Uses the same mechanism as WorldBuilder's AutoEdgeOutTool (autoBlendOut).
 	// Activated by the "Auto Blend" checkbox — only the outer 2-tile ring is blended.
 	if (shape->autoBlendOuter && borderTex >= 0) {
+		// Threshold: absolute 2 tiles in uniform mode; normalized 0.3 in inner-polygon mode.
+		float blendThresh = hasInnerPoly ? 0.3f : 2.0f;
 		for (const BorderTile& bt : tiles.border) {
 			Int hx = bt.pt.x + border, hy = bt.pt.y + border;
 			if (hx < 0 || hy < 0 || hx >= mapW || hy >= mapH) continue;
-			if (bt.dist < 2.0f)
+			if (bt.dist < blendThresh)
 				htMapCopy->autoBlendOut(hx, hy);
 		}
 	}
@@ -899,7 +960,7 @@ TileSet ShapeFillTool::rasterize(const ShapeDef& shape)
 	else if (shape.type == SHAPE_CIRCLE)
 		return rasterizeCircle(shape.cx, shape.cy, shape.r, shape.borderWidth);
 	else
-		return rasterizePolygon(shape.points, shape.borderWidth);
+		return rasterizePolygon(shape.points, shape.borderWidth, shape.innerPoints);
 }
 
 TileSet ShapeFillTool::rasterizeRect(Int x0, Int y0, Int x1, Int y1, Int border)
@@ -958,7 +1019,42 @@ Bool ShapeFillTool::pointInPolygon(Int tx, Int ty, const std::vector<ShapeVertex
 	return inside;
 }
 
-TileSet ShapeFillTool::rasterizePolygon(const std::vector<ShapeVertex>& pts, Int border)
+// Minimum distance from point (px,py) to the boundary of a closed polygon.
+static float distToPolyEdge(float px, float py, const std::vector<ShapeVertex>& poly)
+{
+	float minD = FLT_MAX;
+	Int n = (Int)poly.size();
+	for (Int i = 0, j = n - 1; i < n; j = i++) {
+		float ax = (float)poly[j].tx - poly[i].tx;
+		float ay = (float)poly[j].ty - poly[i].ty;
+		float bx = px - poly[i].tx;
+		float by = py - poly[i].ty;
+		float len2 = ax*ax + ay*ay;
+		float t = (len2 > 0) ? std::max(0.0f, std::min(1.0f, (bx*ax + by*ay) / len2)) : 0.0f;
+		float dx = bx - t*ax, dy = by - t*ay;
+		float d = sqrtf(dx*dx + dy*dy);
+		if (d < minD) minD = d;
+	}
+	return minD;
+}
+
+// Point-in-polygon test (ray casting).
+static bool pointInPoly(float px, float py, const std::vector<ShapeVertex>& poly)
+{
+	bool inside = false;
+	Int n = (Int)poly.size();
+	for (Int i = 0, j = n - 1; i < n; j = i++) {
+		float xi = (float)poly[i].tx, yi = (float)poly[i].ty;
+		float xj = (float)poly[j].tx, yj = (float)poly[j].ty;
+		if (((yi > py) != (yj > py)) &&
+		    (px < (xj - xi) * (py - yi) / (yj - yi) + xi))
+			inside = !inside;
+	}
+	return inside;
+}
+
+TileSet ShapeFillTool::rasterizePolygon(const std::vector<ShapeVertex>& pts, Int border,
+                                        const std::vector<ShapeVertex>& innerPts)
 {
 	if (pts.size() < 3) return {};
 
@@ -968,44 +1064,47 @@ TileSet ShapeFillTool::rasterizePolygon(const std::vector<ShapeVertex>& pts, Int
 		minY = std::min(minY, pt.ty); maxY = std::max(maxY, pt.ty);
 	}
 
-	Int n = (Int)pts.size();
+	bool useInner = ((Int)innerPts.size() >= 3);
 	float bwf = (float)border;
 	TileSet result;
 
 	for (Int x = minX; x <= maxX; x++) {
 		for (Int y = minY; y <= maxY; y++) {
-			// Tile center (matches browser editor distFromEdge using cx = tx + 0.5)
 			float px = x + 0.5f, py = y + 0.5f;
 
-			// Point-in-polygon on tile center
-			bool inside = false;
-			for (Int i = 0, j = n - 1; i < n; j = i++) {
-				float xi = (float)pts[i].tx, yi = (float)pts[i].ty;
-				float xj = (float)pts[j].tx, yj = (float)pts[j].ty;
-				if (((yi > py) != (yj > py)) &&
-				    (px < (xj - xi) * (py - yi) / (yj - yi) + xi))
-					inside = !inside;
-			}
-			if (!inside) continue;
+			if (!pointInPoly(px, py, pts)) continue;
 
-			// Min distance to any edge segment (from tile center)
-			float minDist = bwf;
-			for (Int i = 0, j = n - 1; i < n; j = i++) {
-				float ax = (float)pts[j].tx - pts[i].tx;
-				float ay = (float)pts[j].ty - pts[i].ty;
-				float bx = px - pts[i].tx;
-				float by = py - pts[i].ty;
-				float len2 = ax*ax + ay*ay;
-				float t = (len2 > 0) ? std::max(0.0f, std::min(1.0f, (bx*ax + by*ay) / len2)) : 0.0f;
-				float dx = bx - t*ax, dy = by - t*ay;
-				float d = (float)sqrt(dx*dx + dy*dy);
-				if (d < minDist) minDist = d;
+			if (useInner) {
+				// Free inner polygon mode: border zone is between outer and inner polygon.
+				// dist is normalized [0,1]: 0 = outer boundary, 1 = inner boundary.
+				if (pointInPoly(px, py, innerPts)) {
+					result.inner.push_back(CPoint(x, y));
+				} else {
+					float dOuter = distToPolyEdge(px, py, pts);
+					float dInner = distToPolyEdge(px, py, innerPts);
+					float sum = dOuter + dInner;
+					float normDist = (sum > 0.001f) ? (dOuter / sum) : 0.0f;
+					result.border.push_back({CPoint(x, y), normDist});
+				}
+			} else {
+				// Uniform border mode: dist = absolute distance to outer edge.
+				float minDist = bwf;
+				for (Int i = 0, j = (Int)pts.size() - 1; i < (Int)pts.size(); j = i++) {
+					float ax = (float)pts[j].tx - pts[i].tx;
+					float ay = (float)pts[j].ty - pts[i].ty;
+					float bx = px - pts[i].tx;
+					float by = py - pts[i].ty;
+					float len2 = ax*ax + ay*ay;
+					float t = (len2 > 0) ? std::max(0.0f, std::min(1.0f, (bx*ax + by*ay) / len2)) : 0.0f;
+					float dx = bx - t*ax, dy = by - t*ay;
+					float d = sqrtf(dx*dx + dy*dy);
+					if (d < minDist) minDist = d;
+				}
+				if (minDist >= bwf)
+					result.inner.push_back(CPoint(x, y));
+				else
+					result.border.push_back({CPoint(x, y), minDist});
 			}
-
-			if (minDist >= bwf)
-				result.inner.push_back(CPoint(x, y));
-			else
-				result.border.push_back({CPoint(x, y), minDist});
 		}
 	}
 	return result;
@@ -1043,6 +1142,19 @@ Int ShapeFillTool::hitTestShape(Int tx, Int ty)
 	return -1;
 }
 
+// Returns the effective inner polygon vertices for display/hit-test purposes:
+// uses shape.innerPoints if set, otherwise computes from insetPolygon.
+static std::vector<ShapeVertex> getEffectiveInner(const ShapeDef& shape)
+{
+	if (!shape.innerPoints.empty())
+		return shape.innerPoints;
+	if (shape.type == SHAPE_POLYGON && shape.borderWidth > 0 && (Int)shape.points.size() >= 3) {
+		auto inset = insetPolygon(shape.points, (Real)shape.borderWidth);
+		if ((Int)inset.size() >= 3) return inset;
+	}
+	return {};
+}
+
 std::vector<ShapeHandle> ShapeFillTool::getHandles(const ShapeDef& shape)
 {
 	std::vector<ShapeHandle> handles;
@@ -1056,6 +1168,12 @@ std::vector<ShapeHandle> ShapeFillTool::getHandles(const ShapeDef& shape)
 	} else {
 		for (Int i = 0; i < (Int)shape.points.size(); i++)
 			handles.push_back({HDL_POLY_VERTEX, shape.id, i, shape.points[i].tx, shape.points[i].ty});
+		// Inner polygon vertex handles (shown when borderWidth > 0)
+		if (shape.borderWidth > 0) {
+			auto inner = getEffectiveInner(shape);
+			for (Int i = 0; i < (Int)inner.size(); i++)
+				handles.push_back({HDL_INNER_VERTEX, shape.id, i, inner[i].tx, inner[i].ty});
+		}
 	}
 	return handles;
 }
@@ -1273,6 +1391,11 @@ static std::vector<ShapeHandle> getHandlesStatic(const ShapeDef& shape)
 	} else {
 		for (Int i = 0; i < (Int)shape.points.size(); i++)
 			handles.push_back({HDL_POLY_VERTEX, shape.id, i, shape.points[i].tx, shape.points[i].ty});
+		if (shape.borderWidth > 0) {
+			auto inner = getEffectiveInner(shape);
+			for (Int i = 0; i < (Int)inner.size(); i++)
+				handles.push_back({HDL_INNER_VERTEX, shape.id, i, inner[i].tx, inner[i].ty});
+		}
 	}
 	return handles;
 }
@@ -1300,7 +1423,10 @@ void ShapeFillTool::drawOverlayStatic(CDC* /*pDC_unused*/, WbView* pView)
 			for (const auto& h : getHandlesStatic(shape)) {
 				Int sx, sy;
 				tileToView(pView, h.tx, h.ty, sx, sy);
-				drawHandle(pDC, sx, sy, false);
+				if (h.type == HDL_INNER_VERTEX)
+					drawInnerHandle(pDC, sx, sy);
+				else
+					drawHandle(pDC, sx, sy, false);
 				drawCoordLabel(pDC, sx, sy, h.tx, h.ty);
 			}
 		}
@@ -1508,17 +1634,24 @@ void ShapeFillTool::drawShape(CDC* pDC, WbView* pView, const ShapeDef& shape, Bo
 		} else if (shape.type == SHAPE_CIRCLE && shape.r > bw) {
 			drawCircleStaircase(pDC, pView, shape.cx, shape.cy, shape.r - bw);
 		} else if (shape.type == SHAPE_POLYGON && shape.points.size() >= 3) {
-			// Proper edge-offset inset drawn as staircases (matches outer polygon style)
-			std::vector<ShapeVertex> inset = insetPolygon(shape.points, (Real)bw);
-			if ((Int)inset.size() >= 3) {
-				for (Int i = 1; i < (Int)inset.size(); i++) {
+			// Use free inner polygon if set, otherwise fall back to computed inset
+			const std::vector<ShapeVertex>* drawInner = nullptr;
+			std::vector<ShapeVertex> computed;
+			if (!shape.innerPoints.empty()) {
+				drawInner = &shape.innerPoints;
+			} else {
+				computed = insetPolygon(shape.points, (Real)bw);
+				if ((Int)computed.size() >= 3) drawInner = &computed;
+			}
+			if (drawInner && (Int)drawInner->size() >= 3) {
+				for (Int i = 1; i < (Int)drawInner->size(); i++) {
 					drawSegmentStaircase(pDC, pView,
-						inset[i-1].tx, inset[i-1].ty,
-						inset[i].tx,   inset[i].ty);
+						(*drawInner)[i-1].tx, (*drawInner)[i-1].ty,
+						(*drawInner)[i].tx,   (*drawInner)[i].ty);
 				}
 				drawSegmentStaircase(pDC, pView,
-					inset.back().tx, inset.back().ty,
-					inset[0].tx,     inset[0].ty);
+					drawInner->back().tx, drawInner->back().ty,
+					(*drawInner)[0].tx,   (*drawInner)[0].ty);
 			}
 		}
 		pDC->SelectObject(oldInner);
@@ -1536,6 +1669,18 @@ void ShapeFillTool::drawHandle(CDC* pDC, Int sx, Int sy, Bool active)
 	CPen* oldPen     = pDC->SelectObject(&pen);
 	CBrush* oldBrush = pDC->SelectObject(&brush);
 	pDC->Rectangle(sx - 4, sy - 4, sx + 4, sy + 4);
+	pDC->SelectObject(oldPen);
+	pDC->SelectObject(oldBrush);
+}
+
+void ShapeFillTool::drawInnerHandle(CDC* pDC, Int sx, Int sy)
+{
+	CPen pen(PS_SOLID, 1, RGB(0, 0, 0));
+	CBrush brush(RGB(255, 140, 0));
+	CPen*   oldPen   = pDC->SelectObject(&pen);
+	CBrush* oldBrush = pDC->SelectObject(&brush);
+	POINT pts[4] = { {sx, sy-5}, {sx+5, sy}, {sx, sy+5}, {sx-5, sy} };
+	pDC->Polygon(pts, 4);
 	pDC->SelectObject(oldPen);
 	pDC->SelectObject(oldBrush);
 }

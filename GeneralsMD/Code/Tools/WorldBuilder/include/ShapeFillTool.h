@@ -48,6 +48,9 @@ struct ShapeDef {
 	Int  innerTexClass;   // -1 = no texture
 	Int  borderTexClass;  // -1 = use inner
 
+	// Free-form inner polygon (empty = use computed insetPolygon based on borderWidth)
+	std::vector<ShapeVertex> innerPoints;
+
 	ShapeDef() :
 		id(0), type(SHAPE_RECT), borderWidth(5),
 		x0(0), y0(0), x1(0), y1(0),
@@ -72,7 +75,8 @@ struct LineDef {
 // -------------------------------------------------------------------------
 
 enum HandleType { HDL_CORNER_NW, HDL_CORNER_NE, HDL_CORNER_SW, HDL_CORNER_SE,
-                  HDL_CIRCLE_RADIUS, HDL_POLY_VERTEX, HDL_MOVE_CENTER };
+                  HDL_CIRCLE_RADIUS, HDL_POLY_VERTEX, HDL_MOVE_CENTER,
+                  HDL_INNER_VERTEX };
 
 struct ShapeHandle {
 	HandleType type;
@@ -130,7 +134,18 @@ public:
 	static void setInnerHeight(Int h)    { m_innerHeight = h; }
 	static void setOuterHeight(Int h)    { m_outerHeight = h; }
 	static void setAutoBlend(Bool b)     { m_autoBlend = b; }
-	static void setBorderWidth(Int w)    { m_borderWidth = w; }
+	static void setBorderWidth(Int w)    {
+		m_borderWidth = w;
+		// Reset any free inner polygon so the uniform inset is recomputed.
+		if (m_selectedId >= 0) {
+			for (auto& s : m_shapes) {
+				if (s.id == m_selectedId && s.type == SHAPE_POLYGON) {
+					s.innerPoints.clear();
+					break;
+				}
+			}
+		}
+	}
 	static void setInnerTexClass(Int t)  { m_innerTexClass = t; }
 	static void setBorderTexClass(Int t) { m_borderTexClass = t; }
 
@@ -222,12 +237,14 @@ private:
 	static TileSet    rasterize(const ShapeDef& shape);
 	static TileSet    rasterizeRect(Int x0, Int y0, Int x1, Int y1, Int border);
 	static TileSet    rasterizeCircle(Int cx, Int cy, Int r, Int border);
-	static TileSet    rasterizePolygon(const std::vector<ShapeVertex>& pts, Int border);
+	static TileSet    rasterizePolygon(const std::vector<ShapeVertex>& pts, Int border,
+	                                   const std::vector<ShapeVertex>& innerPts = {});
 	static Bool       pointInPolygon(Int tx, Int ty, const std::vector<ShapeVertex>& pts);
 
 	void              updateDragShape(Int tx, Int ty);
 	static void       drawShape(CDC* pDC, WbView* pView, const ShapeDef& shape, Bool selected);
 	static void       drawHandle(CDC* pDC, Int sx, Int sy, Bool active);
+	static void       drawInnerHandle(CDC* pDC, Int sx, Int sy);
 	static void       drawCoordLabel(CDC* pDC, Int sx, Int sy, Int tx, Int ty);
 	static void       viewToTile(WbView* pView, CPoint viewPt, Int& tx, Int& ty);
 	static void       tileToView(WbView* pView, Int tx, Int ty, Int& sx, Int& sy);
