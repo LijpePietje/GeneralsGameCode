@@ -72,4 +72,5 @@ private:
 
 	void refreshModeButtons();
 	void refreshTexButtons();
+	void refreshModeUI();
 };

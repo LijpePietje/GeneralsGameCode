@@ -135,6 +135,8 @@ void ShapeFillOptions::refreshModeButtons()
 		               && ShapeFillTool::getPolyDraftSize() >= 3;
 		pFinish->ShowWindow(showFinish ? SW_SHOW : SW_HIDE);
 	}
+
+	refreshModeUI();
 }
 
 void ShapeFillOptions::refreshTexButtons()
@@ -400,6 +402,50 @@ void ShapeFillOptions::OnClick3D()
 			pChild->ShowWindow(topDown ? SW_SHOW : SW_HIDE);
 		pChild = pChild->GetNextWindow();
 	}
+
+	// Apply mode-specific visibility on top of the topDown all-show
+	if (topDown)
+		m_staticThis->refreshModeButtons();
+}
+
+void ShapeFillOptions::refreshModeUI()
+{
+	SFToolMode mode = ShapeFillTool::getMode();
+	bool isLine  = (mode == SF_DRAW_LINE);
+	bool isFill  = (mode == SF_BUCKET_FILL);
+	bool isShape = !isLine && !isFill;
+
+	auto show = [&](int id, bool visible) {
+		CWnd* p = GetDlgItem(id);
+		if (p) p->ShowWindow(visible ? SW_SHOW : SW_HIDE);
+	};
+
+	// Heights + border width: shapes only
+	show(IDC_SF_INNER_HEIGHT_EDIT,  isShape);
+	show(IDC_SF_INNER_HEIGHT_POPUP, isShape);
+	show(IDC_SF_OUTER_HEIGHT_EDIT,  isShape);
+	show(IDC_SF_OUTER_HEIGHT_POPUP, isShape);
+	show(IDC_SF_BORDER_WIDTH_EDIT,  isShape);
+	show(IDC_SF_BORDER_WIDTH_POPUP, isShape);
+
+	// Textures: inner tex for shapes + fill; border tex + auto-blend for shapes only
+	show(IDC_SF_INNER_TEX_BTN,   isShape || isFill);
+	show(IDC_SF_BORDER_TEX_BTN,  isShape);
+	show(IDC_SF_AUTO_BLEND,      isShape);
+
+	// Actions: shapes only
+	show(IDC_SF_APPLY_BTN,  isShape);
+	show(IDC_SF_DELETE_BTN, isShape);
+	show(IDC_SF_COPY_BTN,   isShape);
+	show(IDC_SF_PASTE_BTN,  isShape);
+	show(IDC_SF_FLIP_H_BTN, isShape);
+	show(IDC_SF_FLIP_V_BTN, isShape);
+
+	// Line-specific: clear lines button
+	show(IDC_SF_CLEAR_LINES, isLine);
+
+	// Shape list: shapes only (IDC_SF_FINISH_POLY managed separately in refreshModeButtons)
+	show(IDC_SF_SHAPE_LIST, isShape);
 }
 
 BEGIN_MESSAGE_MAP(ShapeFillOptions, COptionsPanel)
