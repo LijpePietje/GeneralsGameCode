@@ -121,6 +121,7 @@ void ShapeFillOptions::refreshModeButtons()
 		{IDC_SF_MODE_SELECT,  SF_SELECT},
 		{IDC_SF_MODE_LINE,    SF_DRAW_LINE},
 		{IDC_SF_MODE_FILL,    SF_BUCKET_FILL},
+		{IDC_SF_MODE_EDIT,    SF_EDIT_SHAPE},
 	};
 	for (auto& b : buttons) {
 		CButton* btn = (CButton*)GetDlgItem(b.id);
@@ -177,6 +178,7 @@ void ShapeFillOptions::OnModePolygon() { ShapeFillTool::setMode(SF_DRAW_POLYGON)
 void ShapeFillOptions::OnModeSelect()  { ShapeFillTool::setMode(SF_SELECT);       refreshModeButtons(); }
 void ShapeFillOptions::OnModeLine()    { ShapeFillTool::setMode(SF_DRAW_LINE);    refreshModeButtons(); }
 void ShapeFillOptions::OnModeFill()    { ShapeFillTool::setMode(SF_BUCKET_FILL);  refreshModeButtons(); }
+void ShapeFillOptions::OnModeEdit()    { ShapeFillTool::setMode(SF_EDIT_SHAPE);   refreshModeButtons(); }
 
 void ShapeFillOptions::OnClickClearLines()
 {
@@ -413,6 +415,7 @@ void ShapeFillOptions::refreshModeUI()
 	SFToolMode mode = ShapeFillTool::getMode();
 	bool isLine  = (mode == SF_DRAW_LINE);
 	bool isFill  = (mode == SF_BUCKET_FILL);
+	bool isEdit  = (mode == SF_EDIT_SHAPE);
 	bool isShape = !isLine && !isFill;
 
 	auto show = [&](int id, bool visible) {
@@ -433,19 +436,19 @@ void ShapeFillOptions::refreshModeUI()
 	show(IDC_SF_BORDER_TEX_BTN,  isShape);
 	show(IDC_SF_AUTO_BLEND,      isShape);
 
-	// Actions: shapes only
+	// Actions: shapes only (in edit mode: only Apply, no shape management)
 	show(IDC_SF_APPLY_BTN,  isShape);
-	show(IDC_SF_DELETE_BTN, isShape);
-	show(IDC_SF_COPY_BTN,   isShape);
-	show(IDC_SF_PASTE_BTN,  isShape);
-	show(IDC_SF_FLIP_H_BTN, isShape);
-	show(IDC_SF_FLIP_V_BTN, isShape);
+	show(IDC_SF_DELETE_BTN, isShape && !isEdit);
+	show(IDC_SF_COPY_BTN,   isShape && !isEdit);
+	show(IDC_SF_PASTE_BTN,  isShape && !isEdit);
+	show(IDC_SF_FLIP_H_BTN, isShape && !isEdit);
+	show(IDC_SF_FLIP_V_BTN, isShape && !isEdit);
 
 	// Line-specific: clear lines button
 	show(IDC_SF_CLEAR_LINES, isLine);
 
-	// Shape list: shapes only (IDC_SF_FINISH_POLY managed separately in refreshModeButtons)
-	show(IDC_SF_SHAPE_LIST, isShape);
+	// Shape list: shapes only but not in edit mode (focus is on vertex editing)
+	show(IDC_SF_SHAPE_LIST, isShape && !isEdit);
 }
 
 BEGIN_MESSAGE_MAP(ShapeFillOptions, COptionsPanel)
@@ -471,5 +474,6 @@ BEGIN_MESSAGE_MAP(ShapeFillOptions, COptionsPanel)
 	ON_BN_CLICKED(IDC_SF_3D_BTN,       OnClick3D)
 	ON_BN_CLICKED(IDC_SF_MODE_LINE,    OnModeLine)
 	ON_BN_CLICKED(IDC_SF_MODE_FILL,    OnModeFill)
+	ON_BN_CLICKED(IDC_SF_MODE_EDIT,    OnModeEdit)
 	ON_BN_CLICKED(IDC_SF_CLEAR_LINES,  OnClickClearLines)
 END_MESSAGE_MAP()

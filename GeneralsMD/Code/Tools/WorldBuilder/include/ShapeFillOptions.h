@@ -48,6 +48,7 @@ protected:
 	afx_msg void OnClick3D();
 	afx_msg void OnModeLine();
 	afx_msg void OnModeFill();
+	afx_msg void OnModeEdit();
 	afx_msg void OnClickClearLines();
 
 	DECLARE_MESSAGE_MAP()

@@ -226,47 +226,8 @@ void ShapeFillTool::mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWo
 			m_moveStartTy    = ty;
 			return;
 		}
-		// Click near inner polygon edge → insert new inner vertex (click-to-add)
-		if (m_selectedId >= 0) {
-			ShapeDef* shape = findShape(m_selectedId);
-			if (shape && shape->type == SHAPE_POLYGON && shape->borderWidth > 0) {
-				auto inner = getEffectiveInner(*shape);
-				if ((Int)inner.size() >= 3) {
-					float closestD = FLT_MAX;
-					Int closestSeg = -1;
-					float closestT = 0;
-					Int m2 = (Int)inner.size();
-					for (Int i = 0; i < m2; i++) {
-						Int j = (i + 1) % m2;
-						float ax = (float)(inner[j].tx - inner[i].tx);
-						float ay = (float)(inner[j].ty - inner[i].ty);
-						float bx = (float)tx - inner[i].tx;
-						float by = (float)ty - inner[i].ty;
-						float len2 = ax*ax + ay*ay;
-						float t2 = (len2 > 0) ? std::max(0.0f, std::min(1.0f, (bx*ax + by*ay) / len2)) : 0.0f;
-						float dx2 = bx - t2*ax, dy2 = by - t2*ay;
-						float d = sqrtf(dx2*dx2 + dy2*dy2);
-						if (d < closestD) { closestD = d; closestSeg = i; closestT = t2; }
-					}
-					// Insert if within 2 tiles of edge but not already near a vertex handle
-					// (vertex handles use HIT_RADIUS=3; we only reach here if hitTestHandle failed)
-					if (closestD <= 2.0f && closestSeg >= 0 && closestT > 0.05f && closestT < 0.95f) {
-						if (shape->innerPoints.empty())
-							shape->innerPoints = inner;
-						Int j = (closestSeg + 1) % (Int)shape->innerPoints.size();
-						Int newTx = (Int)(shape->innerPoints[closestSeg].tx + closestT * (shape->innerPoints[j].tx - shape->innerPoints[closestSeg].tx));
-						Int newTy = (Int)(shape->innerPoints[closestSeg].ty + closestT * (shape->innerPoints[j].ty - shape->innerPoints[closestSeg].ty));
-						shape->innerPoints.insert(shape->innerPoints.begin() + j, {newTx, newTy});
-						m_resizingHandle = true;
-						m_activeHandle   = {HDL_INNER_VERTEX, shape->id, j, newTx, newTy};
-						invalidateBothViews();
-						return;
-					}
-				}
-			}
-		}
 
-		// Then check shape body for move
+		// Check shape body for move/select
 		Int hitId = hitTestShape(tx, ty);
 		if (hitId >= 0) {
 			m_selectedId   = hitId;
@@ -278,6 +239,89 @@ void ShapeFillTool::mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWo
 			m_selectedId = -1;
 			ShapeFillOptions::updateFromTool();
 		}
+		return;
+	}
+
+	if (m_mode == SF_EDIT_SHAPE) {
+		// Hit-test handles first — drag vertex
+		ShapeHandle handle;
+		if (m_selectedId >= 0 && hitTestHandle(tx, ty, handle)) {
+			m_resizingHandle = true;
+			m_activeHandle   = handle;
+			return;
+		}
+
+		// Click near a polygon edge → insert vertex on that edge
+		if (m_selectedId >= 0) {
+			ShapeDef* shape = findShape(m_selectedId);
+			if (shape && shape->type == SHAPE_POLYGON) {
+				// Helper: find closest point on a closed polygon edge
+				auto findClosestEdge = [&](const std::vector<ShapeVertex>& poly,
+				                           float& bestD, Int& bestSeg, float& bestT) {
+					Int n2 = (Int)poly.size();
+					for (Int i = 0; i < n2; i++) {
+						Int j = (i + 1) % n2;
+						float ax = (float)(poly[j].tx - poly[i].tx);
+						float ay = (float)(poly[j].ty - poly[i].ty);
+						float bx = (float)tx - poly[i].tx;
+						float by = (float)ty - poly[i].ty;
+						float len2 = ax*ax + ay*ay;
+						float t2 = (len2 > 0) ? std::max(0.0f, std::min(1.0f, (bx*ax+by*ay)/len2)) : 0.0f;
+						float ddx = bx - t2*ax, ddy = by - t2*ay;
+						float d = sqrtf(ddx*ddx + ddy*ddy);
+						if (d < bestD && t2 > 0.05f && t2 < 0.95f) { bestD = d; bestSeg = i; bestT = t2; }
+					}
+				};
+
+				float bestD = 2.5f; Int bestSeg = -1; float bestT = 0;
+
+				// Check outer polygon edges first
+				findClosestEdge(shape->points, bestD, bestSeg, bestT);
+				if (bestSeg >= 0) {
+					Int j = (bestSeg + 1) % (Int)shape->points.size();
+					Int newTx = (Int)(shape->points[bestSeg].tx + bestT * (shape->points[j].tx - shape->points[bestSeg].tx));
+					Int newTy = (Int)(shape->points[bestSeg].ty + bestT * (shape->points[j].ty - shape->points[bestSeg].ty));
+					shape->points.insert(shape->points.begin() + j, {newTx, newTy});
+					shape->innerPoints.clear(); // outer changed → reset inner
+					m_resizingHandle = true;
+					m_activeHandle   = {HDL_POLY_VERTEX, shape->id, j, newTx, newTy};
+					invalidateBothViews();
+					return;
+				}
+
+				// Check inner polygon edges
+				if (shape->borderWidth > 0) {
+					auto inner = getEffectiveInner(*shape);
+					if ((Int)inner.size() >= 3) {
+						bestD = 2.5f; bestSeg = -1; bestT = 0;
+						findClosestEdge(inner, bestD, bestSeg, bestT);
+						if (bestSeg >= 0) {
+							if (shape->innerPoints.empty())
+								shape->innerPoints = inner;
+							Int j = (bestSeg + 1) % (Int)shape->innerPoints.size();
+							Int newTx = (Int)(shape->innerPoints[bestSeg].tx + bestT * (shape->innerPoints[j].tx - shape->innerPoints[bestSeg].tx));
+							Int newTy = (Int)(shape->innerPoints[bestSeg].ty + bestT * (shape->innerPoints[j].ty - shape->innerPoints[bestSeg].ty));
+							shape->innerPoints.insert(shape->innerPoints.begin() + j, {newTx, newTy});
+							m_resizingHandle = true;
+							m_activeHandle   = {HDL_INNER_VERTEX, shape->id, j, newTx, newTy};
+							invalidateBothViews();
+							return;
+						}
+					}
+				}
+			}
+		}
+
+		// Click on shape body → select it
+		Int hitId = hitTestShape(tx, ty);
+		if (hitId >= 0) {
+			m_selectedId = hitId;
+			ShapeFillOptions::updateFromTool();
+		} else {
+			m_selectedId = -1;
+			ShapeFillOptions::updateFromTool();
+		}
+		invalidateBothViews();
 		return;
 	}
 
@@ -408,6 +452,8 @@ void ShapeFillTool::mouseMoved(TTrackingMode m, CPoint viewPt, WbView* pView, CW
 			invalidateBothViews();
 			return;
 		}
+	}
+	if (m_mode == SF_SELECT || m_mode == SF_EDIT_SHAPE) {
 		if (m_resizingHandle && m == TRACK_L) {
 			ShapeDef* shape = findShape(m_activeHandle.shapeId);
 			if (!shape) return;

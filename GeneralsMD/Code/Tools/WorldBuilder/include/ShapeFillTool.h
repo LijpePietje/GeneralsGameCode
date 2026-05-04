@@ -103,7 +103,7 @@ struct TileSet {
 // ShapeFillTool
 // -------------------------------------------------------------------------
 
-enum SFToolMode { SF_DRAW_RECT, SF_DRAW_CIRCLE, SF_DRAW_POLYGON, SF_SELECT, SF_DRAW_LINE, SF_BUCKET_FILL };
+enum SFToolMode { SF_DRAW_RECT, SF_DRAW_CIRCLE, SF_DRAW_POLYGON, SF_SELECT, SF_DRAW_LINE, SF_BUCKET_FILL, SF_EDIT_SHAPE };
 
 class ShapeFillTool : public Tool {
 public:

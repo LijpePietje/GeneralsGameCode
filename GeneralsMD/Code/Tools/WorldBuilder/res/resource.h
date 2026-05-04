@@ -606,6 +606,7 @@
 #define IDC_SF_MODE_FILL                1408
 #define IDC_SF_CLEAR_LINES              1409
 #define IDC_SF_3D_BTN                   1410
+#define IDC_SF_MODE_EDIT                1411
 
 #define ID_BRUSH_TOOL                   32771
 #define IDM_ShowGrid                    32772
