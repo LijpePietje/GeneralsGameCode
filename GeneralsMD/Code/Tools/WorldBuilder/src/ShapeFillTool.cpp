@@ -502,6 +502,7 @@ void ShapeFillTool::mouseMoved(TTrackingMode m, CPoint viewPt, WbView* pView, CW
 			if (shape->type == SHAPE_RECT) {
 				shape->x0 += dx; shape->y0 += dy;
 				shape->x1 += dx; shape->y1 += dy;
+				for (auto& pt : shape->innerPoints) { pt.tx += dx; pt.ty += dy; }
 			} else if (shape->type == SHAPE_CIRCLE) {
 				shape->cx += dx; shape->cy += dy;
 			} else {
