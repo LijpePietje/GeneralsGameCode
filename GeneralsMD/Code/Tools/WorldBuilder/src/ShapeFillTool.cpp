@@ -72,6 +72,8 @@ static void drawSegmentStaircase(CDC* pDC, WbView* pView, Int cx0, Int cy0, Int 
 static void drawCircleStaircase(CDC* pDC, WbView* pView, Int cx, Int cy, Int r);
 static std::vector<ShapeVertex> insetPolygon(const std::vector<ShapeVertex>& pts, Real amount);
 static std::vector<ShapeVertex> getEffectiveInner(const ShapeDef& shape);
+static bool                     pointInPoly(float px, float py, const std::vector<ShapeVertex>& poly);
+static std::pair<Int,Int>        clampToOuterShape(const ShapeDef& shape, Int tx, Int ty);
 
 // -------------------------------------------------------------------------
 // Helper: invalidate both 2D and 3D views so the overlay redraws everywhere
@@ -279,8 +281,8 @@ void ShapeFillTool::mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWo
 				findClosestEdge(shape->points, bestD, bestSeg, bestT);
 				if (bestSeg >= 0) {
 					Int j = (bestSeg + 1) % (Int)shape->points.size();
-					Int newTx = (Int)(shape->points[bestSeg].tx + bestT * (shape->points[j].tx - shape->points[bestSeg].tx));
-					Int newTy = (Int)(shape->points[bestSeg].ty + bestT * (shape->points[j].ty - shape->points[bestSeg].ty));
+					Int newTx = (Int)roundf(shape->points[bestSeg].tx + bestT * (shape->points[j].tx - shape->points[bestSeg].tx));
+					Int newTy = (Int)roundf(shape->points[bestSeg].ty + bestT * (shape->points[j].ty - shape->points[bestSeg].ty));
 					shape->points.insert(shape->points.begin() + j, {newTx, newTy});
 					shape->innerPoints.clear(); // outer changed → reset inner
 					m_resizingHandle = true;
@@ -299,8 +301,8 @@ void ShapeFillTool::mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWo
 							if (shape->innerPoints.empty())
 								shape->innerPoints = inner;
 							Int j = (bestSeg + 1) % (Int)shape->innerPoints.size();
-							Int newTx = (Int)(shape->innerPoints[bestSeg].tx + bestT * (shape->innerPoints[j].tx - shape->innerPoints[bestSeg].tx));
-							Int newTy = (Int)(shape->innerPoints[bestSeg].ty + bestT * (shape->innerPoints[j].ty - shape->innerPoints[bestSeg].ty));
+							Int newTx = (Int)roundf(shape->innerPoints[bestSeg].tx + bestT * (shape->innerPoints[j].tx - shape->innerPoints[bestSeg].tx));
+							Int newTy = (Int)roundf(shape->innerPoints[bestSeg].ty + bestT * (shape->innerPoints[j].ty - shape->innerPoints[bestSeg].ty));
 							shape->innerPoints.insert(shape->innerPoints.begin() + j, {newTx, newTy});
 							m_resizingHandle = true;
 							m_activeHandle   = {HDL_INNER_VERTEX, shape->id, j, newTx, newTy};
@@ -484,8 +486,9 @@ void ShapeFillTool::mouseMoved(TTrackingMode m, CPoint viewPt, WbView* pView, CW
 				}
 				Int vi = m_activeHandle.vertexIdx;
 				if (vi >= 0 && vi < (Int)shape->innerPoints.size()) {
-					shape->innerPoints[vi].tx = tx;
-					shape->innerPoints[vi].ty = ty;
+					auto clamped = clampToOuterShape(*shape, tx, ty);
+					shape->innerPoints[vi].tx = clamped.first;
+					shape->innerPoints[vi].ty = clamped.second;
 				}
 			}
 			invalidateBothViews();
@@ -1195,6 +1198,39 @@ Int ShapeFillTool::hitTestShape(Int tx, Int ty)
 	return -1;
 }
 
+// Clamps (tx,ty) so that it stays inside the outer boundary of shape.
+static std::pair<Int,Int> clampToOuterShape(const ShapeDef& shape, Int tx, Int ty)
+{
+	if (shape.type == SHAPE_RECT) {
+		Int minX = std::min(shape.x0, shape.x1), maxX = std::max(shape.x0, shape.x1);
+		Int minY = std::min(shape.y0, shape.y1), maxY = std::max(shape.y0, shape.y1);
+		return {std::max(minX, std::min(maxX, tx)), std::max(minY, std::min(maxY, ty))};
+	}
+	if (shape.type == SHAPE_POLYGON && (Int)shape.points.size() >= 3) {
+		if (pointInPoly((float)tx, (float)ty, shape.points))
+			return {tx, ty};
+		// Outside: project to nearest point on outer boundary
+		float bestD2 = FLT_MAX;
+		Int bestX = tx, bestY = ty;
+		Int n = (Int)shape.points.size();
+		for (Int i = 0; i < n; i++) {
+			Int j = (i + 1) % n;
+			float ax = (float)(shape.points[j].tx - shape.points[i].tx);
+			float ay = (float)(shape.points[j].ty - shape.points[i].ty);
+			float bx = (float)tx - shape.points[i].tx;
+			float by = (float)ty - shape.points[i].ty;
+			float len2 = ax*ax + ay*ay;
+			float t = (len2 > 0) ? std::max(0.0f, std::min(1.0f, (bx*ax + by*ay) / len2)) : 0.0f;
+			Int cx = (Int)roundf((float)shape.points[i].tx + t * ax);
+			Int cy = (Int)roundf((float)shape.points[i].ty + t * ay);
+			float d2 = (float)((tx - cx)*(tx - cx) + (ty - cy)*(ty - cy));
+			if (d2 < bestD2) { bestD2 = d2; bestX = cx; bestY = cy; }
+		}
+		return {bestX, bestY};
+	}
+	return {tx, ty};
+}
+
 // Returns the effective inner polygon vertices for display/hit-test purposes:
 // uses shape.innerPoints if set, otherwise computes from insetPolygon.
 static std::vector<ShapeVertex> getEffectiveInner(const ShapeDef& shape)
@@ -1224,7 +1260,7 @@ std::vector<ShapeHandle> ShapeFillTool::getHandles(const ShapeDef& shape)
 		handles.push_back({HDL_CORNER_NE, shape.id, -1, shape.x1, shape.y1});
 		handles.push_back({HDL_CORNER_SW, shape.id, -1, shape.x0, shape.y0});
 		handles.push_back({HDL_CORNER_SE, shape.id, -1, shape.x1, shape.y0});
-		if (shape.borderWidth > 0) {
+		if (m_mode == SF_EDIT_SHAPE && shape.borderWidth > 0) {
 			auto inner = getEffectiveInner(shape);
 			for (Int i = 0; i < (Int)inner.size(); i++)
 				handles.push_back({HDL_INNER_VERTEX, shape.id, i, inner[i].tx, inner[i].ty});
@@ -1234,8 +1270,8 @@ std::vector<ShapeHandle> ShapeFillTool::getHandles(const ShapeDef& shape)
 	} else {
 		for (Int i = 0; i < (Int)shape.points.size(); i++)
 			handles.push_back({HDL_POLY_VERTEX, shape.id, i, shape.points[i].tx, shape.points[i].ty});
-		// Inner polygon vertex handles (shown when borderWidth > 0)
-		if (shape.borderWidth > 0) {
+		// Inner polygon vertex handles (only in Edit mode — prevent blocking Select-mode move)
+		if (m_mode == SF_EDIT_SHAPE && shape.borderWidth > 0) {
 			auto inner = getEffectiveInner(shape);
 			for (Int i = 0; i < (Int)inner.size(); i++)
 				handles.push_back({HDL_INNER_VERTEX, shape.id, i, inner[i].tx, inner[i].ty});
@@ -1452,7 +1488,7 @@ static std::vector<ShapeHandle> getHandlesStatic(const ShapeDef& shape)
 		handles.push_back({HDL_CORNER_NE, shape.id, -1, shape.x1, shape.y1});
 		handles.push_back({HDL_CORNER_SW, shape.id, -1, shape.x0, shape.y0});
 		handles.push_back({HDL_CORNER_SE, shape.id, -1, shape.x1, shape.y0});
-		if (shape.borderWidth > 0) {
+		if (ShapeFillTool::getMode() == SF_EDIT_SHAPE && shape.borderWidth > 0) {
 			auto inner = getEffectiveInner(shape);
 			for (Int i = 0; i < (Int)inner.size(); i++)
 				handles.push_back({HDL_INNER_VERTEX, shape.id, i, inner[i].tx, inner[i].ty});
@@ -1462,7 +1498,7 @@ static std::vector<ShapeHandle> getHandlesStatic(const ShapeDef& shape)
 	} else {
 		for (Int i = 0; i < (Int)shape.points.size(); i++)
 			handles.push_back({HDL_POLY_VERTEX, shape.id, i, shape.points[i].tx, shape.points[i].ty});
-		if (shape.borderWidth > 0) {
+		if (ShapeFillTool::getMode() == SF_EDIT_SHAPE && shape.borderWidth > 0) {
 			auto inner = getEffectiveInner(shape);
 			for (Int i = 0; i < (Int)inner.size(); i++)
 				handles.push_back({HDL_INNER_VERTEX, shape.id, i, inner[i].tx, inner[i].ty});
