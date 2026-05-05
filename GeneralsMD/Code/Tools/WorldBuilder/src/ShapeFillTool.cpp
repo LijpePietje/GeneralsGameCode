@@ -639,7 +639,8 @@ void ShapeFillTool::applySelectedShape(CWorldBuilderDoc* pDoc)
 	// Apply border zone — distance-based gradient (like browser editor)
 	float bwf = (shape->borderWidth > 0) ? (float)shape->borderWidth : 1.0f;
 	// When a free inner polygon is active, bt.dist is already normalized [0,1].
-	bool hasInnerPoly = (shape->type == SHAPE_POLYGON && (Int)shape->innerPoints.size() >= 3);
+	bool hasInnerPoly = ((Int)shape->innerPoints.size() >= 3 &&
+	                     (shape->type == SHAPE_POLYGON || shape->type == SHAPE_RECT));
 	for (const BorderTile& bt : tiles.border) {
 		Int hx = bt.pt.x + border, hy = bt.pt.y + border;
 		if (hx < 0 || hy < 0 || hx >= mapW || hy >= mapH) continue;
@@ -744,6 +745,7 @@ void ShapeFillTool::pasteShape()
 	} else {
 		for (auto& pt : copy.points) { pt.tx += offset; pt.ty += offset; }
 	}
+	for (auto& pt : copy.innerPoints) { pt.tx += offset; pt.ty += offset; }
 
 	m_shapes.push_back(copy);
 	m_selectedId = copy.id;
@@ -758,6 +760,16 @@ void ShapeFillTool::flipSelectedShape(Bool horizontal)
 	if (shape->type == SHAPE_RECT) {
 		if (horizontal) std::swap(shape->x0, shape->x1);
 		else             std::swap(shape->y0, shape->y1);
+		// Flip innerPoints around the rect center axis
+		if (!shape->innerPoints.empty()) {
+			Int minX = std::min(shape->x0, shape->x1), maxX = std::max(shape->x0, shape->x1);
+			Int minY = std::min(shape->y0, shape->y1), maxY = std::max(shape->y0, shape->y1);
+			Int cx2 = minX + maxX, cy2 = minY + maxY;
+			for (auto& pt : shape->innerPoints) {
+				if (horizontal) pt.tx = cx2 - pt.tx;
+				else             pt.ty = cy2 - pt.ty;
+			}
+		}
 	} else if (shape->type == SHAPE_CIRCLE) {
 		// Circle is symmetric — no change needed
 	} else if (shape->type == SHAPE_POLYGON) {
@@ -770,6 +782,10 @@ void ShapeFillTool::flipSelectedShape(Bool horizontal)
 		Int cx2 = minX + maxX; // 2*cx
 		Int cy2 = minY + maxY; // 2*cy
 		for (auto& pt : shape->points) {
+			if (horizontal) pt.tx = cx2 - pt.tx;
+			else             pt.ty = cy2 - pt.ty;
+		}
+		for (auto& pt : shape->innerPoints) {
 			if (horizontal) pt.tx = cx2 - pt.tx;
 			else             pt.ty = cy2 - pt.ty;
 		}
