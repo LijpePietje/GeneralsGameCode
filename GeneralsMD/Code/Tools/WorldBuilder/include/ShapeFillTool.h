@@ -139,7 +139,7 @@ public:
 		// Reset any free inner polygon so the uniform inset is recomputed.
 		if (m_selectedId >= 0) {
 			for (auto& s : m_shapes) {
-				if (s.id == m_selectedId && s.type == SHAPE_POLYGON) {
+				if (s.id == m_selectedId && (s.type == SHAPE_POLYGON || s.type == SHAPE_RECT)) {
 					s.innerPoints.clear();
 					break;
 				}

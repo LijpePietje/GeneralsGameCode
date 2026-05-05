@@ -254,7 +254,7 @@ void ShapeFillTool::mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWo
 		// Click near a polygon edge → insert vertex on that edge
 		if (m_selectedId >= 0) {
 			ShapeDef* shape = findShape(m_selectedId);
-			if (shape && shape->type == SHAPE_POLYGON) {
+			if (shape) {
 				// Helper: find closest point on a closed polygon edge
 				auto findClosestEdge = [&](const std::vector<ShapeVertex>& poly,
 				                           float& bestD, Int& bestSeg, float& bestT) {
@@ -478,9 +478,9 @@ void ShapeFillTool::mouseMoved(TTrackingMode m, CPoint viewPt, WbView* pView, CW
 			else if (m_activeHandle.type == HDL_INNER_VERTEX) {
 				// Initialize innerPoints from computed inset on first drag
 				if (shape->innerPoints.empty()) {
-					auto inset = insetPolygon(shape->points, (Real)shape->borderWidth);
-					if ((Int)inset.size() >= 3)
-						shape->innerPoints = inset;
+					auto inner = getEffectiveInner(*shape);
+					if ((Int)inner.size() >= 3)
+						shape->innerPoints = inner;
 				}
 				Int vi = m_activeHandle.vertexIdx;
 				if (vi >= 0 && vi < (Int)shape->innerPoints.size()) {
@@ -1001,9 +1001,16 @@ void ShapeFillTool::bucketFill(CWorldBuilderDoc* pDoc, Int startTx, Int startTy)
 
 TileSet ShapeFillTool::rasterize(const ShapeDef& shape)
 {
-	if (shape.type == SHAPE_RECT)
+	if (shape.type == SHAPE_RECT) {
+		if (!shape.innerPoints.empty()) {
+			// Rect with free inner polygon: use normalized distance rasterization
+			Int minX = std::min(shape.x0, shape.x1), maxX = std::max(shape.x0, shape.x1);
+			Int minY = std::min(shape.y0, shape.y1), maxY = std::max(shape.y0, shape.y1);
+			std::vector<ShapeVertex> outerPts = {{minX,minY},{maxX,minY},{maxX,maxY},{minX,maxY}};
+			return rasterizePolygon(outerPts, shape.borderWidth, shape.innerPoints);
+		}
 		return rasterizeRect(shape.x0, shape.y0, shape.x1, shape.y1, shape.borderWidth);
-	else if (shape.type == SHAPE_CIRCLE)
+	} else if (shape.type == SHAPE_CIRCLE)
 		return rasterizeCircle(shape.cx, shape.cy, shape.r, shape.borderWidth);
 	else
 		return rasterizePolygon(shape.points, shape.borderWidth, shape.innerPoints);
@@ -1194,6 +1201,14 @@ static std::vector<ShapeVertex> getEffectiveInner(const ShapeDef& shape)
 {
 	if (!shape.innerPoints.empty())
 		return shape.innerPoints;
+	if (shape.type == SHAPE_RECT && shape.borderWidth > 0) {
+		Int bw   = shape.borderWidth;
+		Int minX = std::min(shape.x0, shape.x1), maxX = std::max(shape.x0, shape.x1);
+		Int minY = std::min(shape.y0, shape.y1), maxY = std::max(shape.y0, shape.y1);
+		Int ix0 = minX + bw, iy0 = minY + bw, ix1 = maxX - bw, iy1 = maxY - bw;
+		if (ix1 > ix0 && iy1 > iy0)
+			return {{ix0,iy0},{ix1,iy0},{ix1,iy1},{ix0,iy1}};
+	}
 	if (shape.type == SHAPE_POLYGON && shape.borderWidth > 0 && (Int)shape.points.size() >= 3) {
 		auto inset = insetPolygon(shape.points, (Real)shape.borderWidth);
 		if ((Int)inset.size() >= 3) return inset;
@@ -1209,6 +1224,11 @@ std::vector<ShapeHandle> ShapeFillTool::getHandles(const ShapeDef& shape)
 		handles.push_back({HDL_CORNER_NE, shape.id, -1, shape.x1, shape.y1});
 		handles.push_back({HDL_CORNER_SW, shape.id, -1, shape.x0, shape.y0});
 		handles.push_back({HDL_CORNER_SE, shape.id, -1, shape.x1, shape.y0});
+		if (shape.borderWidth > 0) {
+			auto inner = getEffectiveInner(shape);
+			for (Int i = 0; i < (Int)inner.size(); i++)
+				handles.push_back({HDL_INNER_VERTEX, shape.id, i, inner[i].tx, inner[i].ty});
+		}
 	} else if (shape.type == SHAPE_CIRCLE) {
 		handles.push_back({HDL_CIRCLE_RADIUS, shape.id, -1, shape.cx + shape.r, shape.cy});
 	} else {
@@ -1432,6 +1452,11 @@ static std::vector<ShapeHandle> getHandlesStatic(const ShapeDef& shape)
 		handles.push_back({HDL_CORNER_NE, shape.id, -1, shape.x1, shape.y1});
 		handles.push_back({HDL_CORNER_SW, shape.id, -1, shape.x0, shape.y0});
 		handles.push_back({HDL_CORNER_SE, shape.id, -1, shape.x1, shape.y0});
+		if (shape.borderWidth > 0) {
+			auto inner = getEffectiveInner(shape);
+			for (Int i = 0; i < (Int)inner.size(); i++)
+				handles.push_back({HDL_INNER_VERTEX, shape.id, i, inner[i].tx, inner[i].ty});
+		}
 	} else if (shape.type == SHAPE_CIRCLE) {
 		handles.push_back({HDL_CIRCLE_RADIUS, shape.id, -1, shape.cx + shape.r, shape.cy});
 	} else {
@@ -1666,16 +1691,27 @@ void ShapeFillTool::drawShape(CDC* pDC, WbView* pView, const ShapeDef& shape, Bo
 		pDC->SelectStockObject(NULL_BRUSH);
 		Int bw = shape.borderWidth;
 		if (shape.type == SHAPE_RECT) {
-			Int ix0, iy0, ix1, iy1;
-			Int minX = std::min(shape.x0, shape.x1), maxX = std::max(shape.x0, shape.x1);
-			Int minY = std::min(shape.y0, shape.y1), maxY = std::max(shape.y0, shape.y1);
-			// Only draw if inner zone has positive area
-			if (maxX - minX > 2 * bw && maxY - minY > 2 * bw) {
-				tileToView(pView, minX + bw, minY + bw, ix0, iy0);
-				tileToView(pView, maxX - bw, maxY - bw, ix1, iy1);
-				// Use min/max on screen coords — tile Y and screen Y are inverted
-				pDC->Rectangle(std::min(ix0,ix1), std::min(iy0,iy1),
-				                std::max(ix0,ix1), std::max(iy0,iy1));
+			if (!shape.innerPoints.empty() && (Int)shape.innerPoints.size() >= 3) {
+				// Free inner polygon — draw as staircases
+				for (Int i = 1; i < (Int)shape.innerPoints.size(); i++)
+					drawSegmentStaircase(pDC, pView,
+						shape.innerPoints[i-1].tx, shape.innerPoints[i-1].ty,
+						shape.innerPoints[i].tx,   shape.innerPoints[i].ty);
+				drawSegmentStaircase(pDC, pView,
+					shape.innerPoints.back().tx, shape.innerPoints.back().ty,
+					shape.innerPoints[0].tx,     shape.innerPoints[0].ty);
+			} else {
+				Int ix0, iy0, ix1, iy1;
+				Int minX = std::min(shape.x0, shape.x1), maxX = std::max(shape.x0, shape.x1);
+				Int minY = std::min(shape.y0, shape.y1), maxY = std::max(shape.y0, shape.y1);
+				// Only draw if inner zone has positive area
+				if (maxX - minX > 2 * bw && maxY - minY > 2 * bw) {
+					tileToView(pView, minX + bw, minY + bw, ix0, iy0);
+					tileToView(pView, maxX - bw, maxY - bw, ix1, iy1);
+					// Use min/max on screen coords — tile Y and screen Y are inverted
+					pDC->Rectangle(std::min(ix0,ix1), std::min(iy0,iy1),
+					                std::max(ix0,ix1), std::max(iy0,iy1));
+				}
 			}
 		} else if (shape.type == SHAPE_CIRCLE && shape.r > bw) {
 			drawCircleStaircase(pDC, pView, shape.cx, shape.cy, shape.r - bw);
