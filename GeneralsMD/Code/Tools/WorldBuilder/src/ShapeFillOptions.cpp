@@ -422,6 +422,10 @@ void ShapeFillOptions::refreshModeUI()
 		CWnd* p = GetDlgItem(id);
 		if (p) p->ShowWindow(visible ? SW_SHOW : SW_HIDE);
 	};
+	auto enable = [&](int id, bool enabled) {
+		CWnd* p = GetDlgItem(id);
+		if (p) p->EnableWindow(enabled ? TRUE : FALSE);
+	};
 
 	// Heights + border width: shapes only
 	show(IDC_SF_INNER_HEIGHT_EDIT,  isShape);
@@ -430,6 +434,9 @@ void ShapeFillOptions::refreshModeUI()
 	show(IDC_SF_OUTER_HEIGHT_POPUP, isShape);
 	show(IDC_SF_BORDER_WIDTH_EDIT,  isShape);
 	show(IDC_SF_BORDER_WIDTH_POPUP, isShape);
+	// Border width is overruled by free inner polygon in Edit mode — gray it out
+	enable(IDC_SF_BORDER_WIDTH_EDIT,  !isEdit);
+	enable(IDC_SF_BORDER_WIDTH_POPUP, !isEdit);
 
 	// Textures: inner tex for shapes + fill; border tex + auto-blend for shapes only
 	show(IDC_SF_INNER_TEX_BTN,   isShape || isFill);
