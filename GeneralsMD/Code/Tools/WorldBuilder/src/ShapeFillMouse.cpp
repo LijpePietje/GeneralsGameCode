@@ -164,7 +164,11 @@ void ShapeFillTool::mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWo
 				}
 			}
 		}
-		if (hitLine) return;
+		if (hitLine) {
+			m_undoSnapshotBeforeDrag = captureSnapshot();
+			m_hasDragSnapshot = true;
+			return;
+		}
 
 		// Check shape handles
 		ShapeHandle handle;
@@ -173,6 +177,8 @@ void ShapeFillTool::mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWo
 			m_activeHandle   = handle;
 			m_moveStartTx    = tx;
 			m_moveStartTy    = ty;
+			m_undoSnapshotBeforeDrag = captureSnapshot();
+			m_hasDragSnapshot = true;
 			return;
 		}
 
@@ -183,6 +189,8 @@ void ShapeFillTool::mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWo
 			m_movingShape = true;
 			m_moveStartTx = tx;
 			m_moveStartTy = ty;
+			m_undoSnapshotBeforeDrag = captureSnapshot();
+			m_hasDragSnapshot = true;
 			ShapeFillOptions::updateFromTool();
 		} else {
 			m_selectedId = -1;
@@ -197,6 +205,8 @@ void ShapeFillTool::mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWo
 		if (m_selectedId >= 0 && hitTestHandle(tx, ty, handle)) {
 			m_resizingHandle = true;
 			m_activeHandle   = handle;
+			m_undoSnapshotBeforeDrag = captureSnapshot();
+			m_hasDragSnapshot = true;
 			return;
 		}
 
@@ -226,6 +236,8 @@ void ShapeFillTool::mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWo
 				// Check outer polygon edges first
 				findClosestEdge(shape->points, bestD, bestSeg, bestT);
 				if (bestSeg >= 0) {
+					m_undoSnapshotBeforeDrag = captureSnapshot();
+					m_hasDragSnapshot = true;
 					Int j = (bestSeg + 1) % (Int)shape->points.size();
 					Int newTx = (Int)roundf(shape->points[bestSeg].tx + bestT * (shape->points[j].tx - shape->points[bestSeg].tx));
 					Int newTy = (Int)roundf(shape->points[bestSeg].ty + bestT * (shape->points[j].ty - shape->points[bestSeg].ty));
@@ -244,6 +256,8 @@ void ShapeFillTool::mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWo
 						bestD = 2.5f; bestSeg = -1; bestT = 0;
 						findClosestEdge(inner, bestD, bestSeg, bestT);
 						if (bestSeg >= 0) {
+							m_undoSnapshotBeforeDrag = captureSnapshot();
+							m_hasDragSnapshot = true;
 							if (shape->innerPoints.empty())
 								shape->innerPoints = inner;
 							Int j = (bestSeg + 1) % (Int)shape->innerPoints.size();
@@ -331,6 +345,8 @@ void ShapeFillTool::mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWo
 	}
 
 	// Rect or circle: start drag
+	m_undoSnapshotBeforeDrag = captureSnapshot();
+	m_hasDragSnapshot = true;
 	m_dragging      = true;
 	m_dragStartView = viewPt;
 	m_dragStartTx   = tx;
@@ -422,7 +438,7 @@ void ShapeFillTool::mouseMoved(TTrackingMode m, CPoint viewPt, WbView* pView, CW
 				}
 			}
 			else if (m_activeHandle.type == HDL_INNER_VERTEX) {
-				// Initialize innerPoints from computed inset on first drag
+				// Initialize innerPoints from computed inset on first drag (works for all shape types)
 				if (shape->innerPoints.empty()) {
 					auto inner = getEffectiveInner(*shape);
 					if ((Int)inner.size() >= 3)
@@ -464,7 +480,7 @@ void ShapeFillTool::mouseMoved(TTrackingMode m, CPoint viewPt, WbView* pView, CW
 	}
 }
 
-void ShapeFillTool::mouseUp(TTrackingMode m, CPoint viewPt, WbView* pView, CWorldBuilderDoc* /*pDoc*/)
+void ShapeFillTool::mouseUp(TTrackingMode m, CPoint viewPt, WbView* pView, CWorldBuilderDoc* pDoc)
 {
 	if (m != TRACK_L) return;
 
@@ -475,7 +491,15 @@ void ShapeFillTool::mouseUp(TTrackingMode m, CPoint viewPt, WbView* pView, CWorl
 	m_resizingHandle  = false;
 	m_movingLinePoint = false;
 
-	if (!m_dragging) return;
+	// Push undo for handle/move/line gestures (m_dragging is false for these)
+	bool hadSnapshot = m_hasDragSnapshot;
+	m_hasDragSnapshot = false;
+
+	if (!m_dragging) {
+		if (hadSnapshot && pDoc)
+			pushUndo(pDoc, m_undoSnapshotBeforeDrag);
+		return;
+	}
 	m_dragging = false;
 	m_hasDraft = false;
 
@@ -509,5 +533,8 @@ void ShapeFillTool::mouseUp(TTrackingMode m, CPoint viewPt, WbView* pView, CWorl
 		setMode(SF_SELECT);
 		ShapeFillOptions::updateFromTool();
 		invalidateBothViews();
+
+		if (hadSnapshot && pDoc)
+			pushUndo(pDoc, m_undoSnapshotBeforeDrag);
 	}
 }

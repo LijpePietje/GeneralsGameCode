@@ -64,6 +64,14 @@ std::pair<Int,Int> ShapeFillTool::clampToOuterShape(const ShapeDef& shape, Int t
 		Int minY = std::min(shape.y0, shape.y1), maxY = std::max(shape.y0, shape.y1);
 		return {std::max(minX, std::min(maxX, tx)), std::max(minY, std::min(maxY, ty))};
 	}
+	if (shape.type == SHAPE_CIRCLE) {
+		float dx = (float)(tx - shape.cx), dy = (float)(ty - shape.cy);
+		float dist = sqrtf(dx*dx + dy*dy);
+		float rf = (float)shape.r;
+		if (dist <= rf) return {tx, ty};
+		return {shape.cx + (Int)roundf(dx * rf / dist),
+		        shape.cy + (Int)roundf(dy * rf / dist)};
+	}
 	if (shape.type == SHAPE_POLYGON && (Int)shape.points.size() >= 3) {
 		if (pointInPoly((float)tx, (float)ty, shape.points))
 			return {tx, ty};
@@ -100,6 +108,18 @@ std::vector<ShapeVertex> ShapeFillTool::getEffectiveInner(const ShapeDef& shape)
 		Int ix0 = minX + bw, iy0 = minY + bw, ix1 = maxX - bw, iy1 = maxY - bw;
 		if (ix1 > ix0 && iy1 > iy0)
 			return {{ix0,iy0},{ix1,iy0},{ix1,iy1},{ix0,iy1}};
+	}
+	if (shape.type == SHAPE_CIRCLE && shape.borderWidth > 0 && shape.r > shape.borderWidth) {
+		Int innerR = shape.r - shape.borderWidth;
+		const Int N = 12;
+		const float kPi = 3.14159265f;
+		std::vector<ShapeVertex> pts;
+		for (Int i = 0; i < N; i++) {
+			float angle = 2.0f * kPi * i / N;
+			pts.push_back({shape.cx + (Int)roundf(innerR * cosf(angle)),
+			               shape.cy + (Int)roundf(innerR * sinf(angle))});
+		}
+		return pts;
 	}
 	if (shape.type == SHAPE_POLYGON && shape.borderWidth > 0 && (Int)shape.points.size() >= 3) {
 		auto inset = insetPolygon(shape.points, (Real)shape.borderWidth);
@@ -381,6 +401,18 @@ TileSet ShapeFillTool::rasterize(const ShapeDef& shape)
 		}
 		return rasterizeRect(shape.x0, shape.y0, shape.x1, shape.y1, shape.borderWidth);
 	} else if (shape.type == SHAPE_CIRCLE) {
+		if (!shape.innerPoints.empty() && (Int)shape.innerPoints.size() >= 3) {
+			// Circle with free inner polygon: approximate outer circle as polygon
+			const Int N = 24;
+			const float kPi = 3.14159265f;
+			std::vector<ShapeVertex> outerPoly;
+			for (Int i = 0; i < N; i++) {
+				float angle = 2.0f * kPi * i / N;
+				outerPoly.push_back({shape.cx + (Int)roundf(shape.r * cosf(angle)),
+				                     shape.cy + (Int)roundf(shape.r * sinf(angle))});
+			}
+			return rasterizePolygon(outerPoly, shape.borderWidth, shape.innerPoints);
+		}
 		return rasterizeCircle(shape.cx, shape.cy, shape.r, shape.borderWidth);
 	} else {
 		return rasterizePolygon(shape.points, shape.borderWidth, shape.innerPoints);

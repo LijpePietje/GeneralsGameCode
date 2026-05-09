@@ -187,6 +187,11 @@ std::vector<ShapeHandle> ShapeFillTool::getHandles(const ShapeDef& shape)
 		}
 	} else if (shape.type == SHAPE_CIRCLE) {
 		handles.push_back({HDL_CIRCLE_RADIUS, shape.id, -1, shape.cx + shape.r, shape.cy});
+		if (m_mode == SF_EDIT_SHAPE && shape.borderWidth > 0) {
+			auto inner = getEffectiveInner(shape);
+			for (Int i = 0; i < (Int)inner.size(); i++)
+				handles.push_back({HDL_INNER_VERTEX, shape.id, i, inner[i].tx, inner[i].ty});
+		}
 	} else {
 		for (Int i = 0; i < (Int)shape.points.size(); i++)
 			handles.push_back({HDL_POLY_VERTEX, shape.id, i, shape.points[i].tx, shape.points[i].ty});
@@ -257,7 +262,17 @@ void ShapeFillTool::drawShape(CDC* pDC, WbView* pView, const ShapeDef& shape, Bo
 				}
 			}
 		} else if (shape.type == SHAPE_CIRCLE && shape.r > bw) {
-			drawCircleStaircase(pDC, pView, shape.cx, shape.cy, shape.r - bw);
+			if (!shape.innerPoints.empty() && (Int)shape.innerPoints.size() >= 3) {
+				for (Int i = 1; i < (Int)shape.innerPoints.size(); i++)
+					drawSegmentStaircase(pDC, pView,
+						shape.innerPoints[i-1].tx, shape.innerPoints[i-1].ty,
+						shape.innerPoints[i].tx,   shape.innerPoints[i].ty);
+				drawSegmentStaircase(pDC, pView,
+					shape.innerPoints.back().tx, shape.innerPoints.back().ty,
+					shape.innerPoints[0].tx,     shape.innerPoints[0].ty);
+			} else {
+				drawCircleStaircase(pDC, pView, shape.cx, shape.cy, shape.r - bw);
+			}
 		} else if (shape.type == SHAPE_POLYGON && shape.points.size() >= 3) {
 			const std::vector<ShapeVertex>* drawInner = nullptr;
 			std::vector<ShapeVertex> computed;

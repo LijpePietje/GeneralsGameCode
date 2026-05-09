@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "CUndoable.h"
 #include "Tool.h"
 #include <vector>
 
@@ -100,6 +101,29 @@ struct TileSet {
 };
 
 // -------------------------------------------------------------------------
+// Undo/redo snapshot
+// -------------------------------------------------------------------------
+
+struct ShapeFillSnapshot {
+	std::vector<ShapeDef> shapes;
+	std::vector<LineDef>  lines;
+	Int selectedId;
+	Int nextId;
+	Int nextLineId;
+};
+
+class ShapeFillUndoable : public Undoable {
+	ShapeFillSnapshot m_before;
+	ShapeFillSnapshot m_after;
+public:
+	ShapeFillUndoable(ShapeFillSnapshot before, ShapeFillSnapshot after)
+		: m_before(std::move(before)), m_after(std::move(after)) {}
+	virtual ~ShapeFillUndoable() override {}
+	virtual void Do() override;
+	virtual void Undo() override;
+};
+
+// -------------------------------------------------------------------------
 // ShapeFillTool
 // -------------------------------------------------------------------------
 
@@ -176,6 +200,10 @@ public:
 	static void saveShapes(const CString& mapPath);
 	static void loadShapes(const CString& mapPath);
 
+	// Undo/redo snapshot helpers (public so ShapeFillUndoable can call them)
+	static ShapeFillSnapshot captureSnapshot();
+	static void              restoreSnapshot(const ShapeFillSnapshot& snap);
+
 	// Drawing overlay
 	void drawOverlay(CDC* pDC, WbView* pView) override { drawOverlayStatic(pDC, pView); }
 	static void drawOverlayStatic(CDC* pDC, WbView* pView);
@@ -226,6 +254,10 @@ private:
 	CPoint      m_dragStartView;
 	Int         m_dragStartTx, m_dragStartTy;
 
+	// Snapshot captured at gesture start, pushed to undo stack at gesture end
+	Bool              m_hasDragSnapshot;
+	ShapeFillSnapshot m_undoSnapshotBeforeDrag;
+
 	// Editing shape handles
 	Bool        m_movingShape;
 	Bool        m_resizingHandle;
@@ -236,6 +268,10 @@ private:
 	Bool        m_movingLinePoint;
 	Int         m_activeLineIdx;
 	Int         m_activePointIdx;
+
+	// ---- Private helpers — undo ----
+	static void              pushUndo(CWorldBuilderDoc* pDoc, const ShapeFillSnapshot& before);
+	static CWorldBuilderDoc* getActiveDoc();
 
 	// ---- Private helpers — shape management ----
 	static ShapeDef* findShape(Int id);
