@@ -32,8 +32,7 @@ protected:
 	afx_msg void OnModeSelect();
 	afx_msg void OnClickApply();
 	afx_msg void OnClickDelete();
-	afx_msg void OnClickCopy();
-	afx_msg void OnClickPaste();
+	afx_msg void OnClickDuplicate();
 	afx_msg void OnClickFlipH();
 	afx_msg void OnClickFlipV();
 	afx_msg void OnClickFinishPoly();

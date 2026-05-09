@@ -212,9 +212,14 @@ void ShapeFillOptions::OnClickApply()
 	if (pDoc) ShapeFillTool::applySelectedShape(pDoc);
 }
 
-void ShapeFillOptions::OnClickDelete()  { ShapeFillTool::deleteSelectedShape(); updateFromTool(); syncAndRedraw(); }
-void ShapeFillOptions::OnClickCopy()    { ShapeFillTool::copySelectedShape(); }
-void ShapeFillOptions::OnClickPaste()   { ShapeFillTool::pasteShape(); updateFromTool(); AfxGetMainWnd()->Invalidate(); }
+void ShapeFillOptions::OnClickDelete()    { ShapeFillTool::deleteSelectedShape(); updateFromTool(); syncAndRedraw(); }
+void ShapeFillOptions::OnClickDuplicate()
+{
+	ShapeFillTool::copySelectedShape();
+	ShapeFillTool::pasteShape();
+	updateFromTool();
+	AfxGetMainWnd()->Invalidate();
+}
 void ShapeFillOptions::OnClickFlipH()   { ShapeFillTool::flipSelectedShape(true);  AfxGetMainWnd()->Invalidate(); }
 void ShapeFillOptions::OnClickFlipV()   { ShapeFillTool::flipSelectedShape(false); AfxGetMainWnd()->Invalidate(); }
 
@@ -454,7 +459,6 @@ void ShapeFillOptions::refreshModeUI()
 	show(IDC_SF_APPLY_BTN,  isShape);
 	show(IDC_SF_DELETE_BTN, isShape && !isEdit);
 	show(IDC_SF_COPY_BTN,   isShape && !isEdit);
-	show(IDC_SF_PASTE_BTN,  isShape && !isEdit);
 	show(IDC_SF_FLIP_H_BTN, isShape && !isEdit);
 	show(IDC_SF_FLIP_V_BTN, isShape && !isEdit);
 
@@ -473,8 +477,7 @@ BEGIN_MESSAGE_MAP(ShapeFillOptions, COptionsPanel)
 	ON_BN_CLICKED(IDC_SF_FINISH_POLY,  OnClickFinishPoly)
 	ON_BN_CLICKED(IDC_SF_APPLY_BTN,    OnClickApply)
 	ON_BN_CLICKED(IDC_SF_DELETE_BTN,   OnClickDelete)
-	ON_BN_CLICKED(IDC_SF_COPY_BTN,     OnClickCopy)
-	ON_BN_CLICKED(IDC_SF_PASTE_BTN,    OnClickPaste)
+	ON_BN_CLICKED(IDC_SF_COPY_BTN,     OnClickDuplicate)
 	ON_BN_CLICKED(IDC_SF_FLIP_H_BTN,   OnClickFlipH)
 	ON_BN_CLICKED(IDC_SF_FLIP_V_BTN,   OnClickFlipV)
 	ON_BN_CLICKED(IDC_SF_INNER_TEX_BTN, OnSelectInnerTex)

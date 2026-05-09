@@ -1695,9 +1695,9 @@ BEGIN
                     BS_AUTOCHECKBOX | BS_LEFTTEXT | WS_TABSTOP,40,51,95,14
 END
 
-IDD_SHAPE_FILL_OPTIONS DIALOG DISCARDABLE  0, 0, 200, 344
+IDD_SHAPE_FILL_OPTIONS DIALOG DISCARDABLE  0, 0, 200, 350
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION
-CAPTION "Shape Fill Options"
+CAPTION "Terrain & Texture Painter"
 FONT 8, "MS Sans Serif"
 BEGIN
     PUSHBUTTON      ">> Switch to Top Down View",IDC_SF_TOPDOWN_BTN,2,2,196,12
@@ -1732,13 +1732,13 @@ BEGIN
     GROUPBOX        "Actions",IDC_STATIC,2,196,196,60
     PUSHBUTTON      "Apply",IDC_SF_APPLY_BTN,8,210,40,14
     PUSHBUTTON      "Delete",IDC_SF_DELETE_BTN,54,210,40,14
-    PUSHBUTTON      "Copy",IDC_SF_COPY_BTN,100,210,40,14
-    PUSHBUTTON      "Paste",IDC_SF_PASTE_BTN,146,210,40,14
+    PUSHBUTTON      "Duplicate",IDC_SF_COPY_BTN,100,210,86,14
     PUSHBUTTON      "Flip H",IDC_SF_FLIP_H_BTN,8,228,40,14
     PUSHBUTTON      "Flip V",IDC_SF_FLIP_V_BTN,54,228,40,14
     LTEXT           "",IDC_SF_COORDS_LABEL,2,278,196,10
     GROUPBOX        "Shapes",IDC_STATIC,2,290,196,45
     LISTBOX         IDC_SF_SHAPE_LIST,6,300,188,30,LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_TABSTOP
+    CONTROL         "Save shapes with map (.wbsession)",IDC_SF_AUTO_SAVE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,4,335,192,10
 END
 
 IDD_TeamObjectProperties DIALOG DISCARDABLE  0, 0, 213, 327
@@ -2909,7 +2909,7 @@ END
 STRINGTABLE DISCARDABLE 
 BEGIN
     ID_BORDERTOOL           "Add and adjust borders.\nBorder Tool"
-    ID_SHAPE_FILL_TOOL      "Draw and apply shapes (rect/circle/polygon) with texture and height.\nShape Fill Tool"
+    ID_SHAPE_FILL_TOOL      "Draw and apply terrain shapes with texture and height.\nTerrain & Texture Painter"
     ID_VALIDATION_GENERATEMAPREPORT 
                             "Generate a report about Map validity, possible problems, etc."
     ID_VALIDATION_FIXTEAMS  "Adjust all teams so that they're ""Execute Associated Action"" is false."

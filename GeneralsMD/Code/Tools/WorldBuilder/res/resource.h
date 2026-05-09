@@ -595,7 +595,6 @@
 #define IDC_SF_AUTO_BLEND               1397
 #define IDC_SF_APPLY_BTN                1398
 #define IDC_SF_COPY_BTN                 1399
-#define IDC_SF_PASTE_BTN                1400
 #define IDC_SF_FLIP_H_BTN               1401
 #define IDC_SF_FLIP_V_BTN               1402
 #define IDC_SF_DELETE_BTN               1403
@@ -607,6 +606,7 @@
 #define IDC_SF_CLEAR_LINES              1409
 #define IDC_SF_3D_BTN                   1410
 #define IDC_SF_MODE_EDIT                1411
+#define IDC_SF_AUTO_SAVE                1412
 
 #define ID_BRUSH_TOOL                   32771
 #define IDM_ShowGrid                    32772
