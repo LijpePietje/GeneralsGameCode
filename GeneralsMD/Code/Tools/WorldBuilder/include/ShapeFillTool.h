@@ -9,7 +9,7 @@
 */
 
 // ShapeFillTool.h
-// Shape-based terrain fill tool for WorldBuilder.
+// Terrain & Texture Painter — shape-based terrain painting tool for WorldBuilder.
 // Draw rect/circle/polygon shapes, assign texture + height, apply to terrain.
 
 #pragma once
@@ -26,7 +26,7 @@ class WorldHeightMapEdit;
 enum ShapeType { SHAPE_RECT, SHAPE_CIRCLE, SHAPE_POLYGON };
 
 struct ShapeVertex {
-	Int tx, ty; // tile coordinates
+	Int tx, ty;
 };
 
 struct ShapeDef {
@@ -48,7 +48,7 @@ struct ShapeDef {
 	Int  innerTexClass;   // -1 = no texture
 	Int  borderTexClass;  // -1 = use inner
 
-	// Free-form inner polygon (empty = use computed insetPolygon based on borderWidth)
+	// Free-form inner polygon (empty = use computed inset based on borderWidth)
 	std::vector<ShapeVertex> innerPoints;
 
 	ShapeDef() :
@@ -81,8 +81,8 @@ enum HandleType { HDL_CORNER_NW, HDL_CORNER_NE, HDL_CORNER_SW, HDL_CORNER_SE,
 struct ShapeHandle {
 	HandleType type;
 	Int        shapeId;
-	Int        vertexIdx; // for POLY_VERTEX
-	Int        tx, ty;    // current tile position
+	Int        vertexIdx;
+	Int        tx, ty;
 };
 
 // -------------------------------------------------------------------------
@@ -91,7 +91,7 @@ struct ShapeHandle {
 
 struct BorderTile {
 	CPoint pt;
-	float  dist; // tiles from outer edge: 0 at edge, borderWidth at inner boundary
+	float  dist; // 0 = outer edge, borderWidth (or 1.0 normalized) = inner boundary
 };
 
 struct TileSet {
@@ -103,7 +103,8 @@ struct TileSet {
 // ShapeFillTool
 // -------------------------------------------------------------------------
 
-enum SFToolMode { SF_DRAW_RECT, SF_DRAW_CIRCLE, SF_DRAW_POLYGON, SF_SELECT, SF_DRAW_LINE, SF_BUCKET_FILL, SF_EDIT_SHAPE };
+enum SFToolMode { SF_DRAW_RECT, SF_DRAW_CIRCLE, SF_DRAW_POLYGON, SF_SELECT,
+                  SF_DRAW_LINE, SF_BUCKET_FILL, SF_EDIT_SHAPE };
 
 class ShapeFillTool : public Tool {
 public:
@@ -119,7 +120,7 @@ public:
 	virtual WorldHeightMapEdit* getHeightMap() override { return nullptr; }
 
 	// Mode
-	static void setMode(SFToolMode mode);
+	static void      setMode(SFToolMode mode);
 	static SFToolMode getMode() { return m_mode; }
 
 	// Shape management
@@ -136,7 +137,6 @@ public:
 	static void setAutoBlend(Bool b)     { m_autoBlend = b; }
 	static void setBorderWidth(Int w)    {
 		m_borderWidth = w;
-		// Reset any free inner polygon so the uniform inset is recomputed.
 		if (m_selectedId >= 0) {
 			for (auto& s : m_shapes) {
 				if (s.id == m_selectedId && (s.type == SHAPE_POLYGON || s.type == SHAPE_RECT)) {
@@ -149,12 +149,15 @@ public:
 	static void setInnerTexClass(Int t)  { m_innerTexClass = t; }
 	static void setBorderTexClass(Int t) { m_borderTexClass = t; }
 
-	static Int  getInnerHeight()   { return m_innerHeight; }
-	static Int  getOuterHeight()   { return m_outerHeight; }
-	static Bool getAutoBlend()     { return m_autoBlend; }
-	static Int  getBorderWidth()   { return m_borderWidth; }
-	static Int  getInnerTexClass() { return m_innerTexClass; }
-	static Int  getBorderTexClass(){ return m_borderTexClass; }
+	static Int  getInnerHeight()    { return m_innerHeight; }
+	static Int  getOuterHeight()    { return m_outerHeight; }
+	static Bool getAutoBlend()      { return m_autoBlend; }
+	static Int  getBorderWidth()    { return m_borderWidth; }
+	static Int  getInnerTexClass()  { return m_innerTexClass; }
+	static Int  getBorderTexClass() { return m_borderTexClass; }
+
+	static Bool getAutoSave()       { return m_autoSave; }
+	static void setAutoSave(Bool b) { m_autoSave = b; }
 
 	static Int  getSelectedId()    { return m_selectedId; }
 	static void setSelectedId(Int id) { m_selectedId = id; }
@@ -169,11 +172,17 @@ public:
 	static void bucketFill(CWorldBuilderDoc* pDoc, Int tx, Int ty);
 	static const std::vector<LineDef>& getLines() { return m_lines; }
 
-	// Drawing overlay (called from WorldBuilderView via Tool base class virtual)
+	// Persistence
+	static void saveShapes(const CString& mapPath);
+	static void loadShapes(const CString& mapPath);
+
+	// Drawing overlay
 	void drawOverlay(CDC* pDC, WbView* pView) override { drawOverlayStatic(pDC, pView); }
 	static void drawOverlayStatic(CDC* pDC, WbView* pView);
 
 private:
+	// ---- Static state ----
+
 	// Shape list & selection
 	static std::vector<ShapeDef> m_shapes;
 	static Int                   m_nextId;
@@ -190,62 +199,86 @@ private:
 	static Int        m_borderWidth;
 	static Int        m_innerTexClass;
 	static Int        m_borderTexClass;
-
-	// Drag state — drawing new shape
-	Bool   m_dragging;
-	CPoint m_dragStartView;
-	Int    m_dragStartTx, m_dragStartTy;
+	static Bool       m_autoSave;
 
 	// Draft shape shown during drag before mouseUp
-	static Bool    m_hasDraft;
+	static Bool     m_hasDraft;
 	static ShapeDef m_draftShape;
 
 	// Polygon drawing state
-	static Bool                   m_polyDrawing;
+	static Bool                    m_polyDrawing;
 	static std::vector<ShapeVertex> m_polyDraft;
 
 	// Line drawing state
-	static std::vector<LineDef>   m_lines;
-	static Int                    m_nextLineId;
-	static Bool                   m_lineDrawing;
+	static std::vector<LineDef>    m_lines;
+	static Int                     m_nextLineId;
+	static Bool                    m_lineDrawing;
 	static std::vector<ShapeVertex> m_lineDraft;
 
-	// Snap cursor (live preview while hovering in line mode)
+	// Snap cursor (live preview while hovering in line/polygon mode)
 	static Bool m_hasSnapCorner;
 	static Int  m_snapCx, m_snapCy;
 
-	// Saved camera state — restored when tool deactivates
-	Bool        m_prevTopDown;
+	// ---- Instance state ----
 
-	// Drag state — editing shape handles
+	Bool        m_prevTopDown;
+	Bool        m_dragging;
+	CPoint      m_dragStartView;
+	Int         m_dragStartTx, m_dragStartTy;
+
+	// Editing shape handles
 	Bool        m_movingShape;
 	Bool        m_resizingHandle;
 	ShapeHandle m_activeHandle;
 	Int         m_moveStartTx, m_moveStartTy;
 
-	// Drag state — editing line endpoints
+	// Editing line endpoints
 	Bool        m_movingLinePoint;
 	Int         m_activeLineIdx;
 	Int         m_activePointIdx;
 
-	// Internal helpers
-	ShapeDef*         findShape(Int id);
-	Int               hitTestShape(Int tx, Int ty);
-	Bool              hitTestHandle(Int tx, Int ty, ShapeHandle& outHandle);
-	std::vector<ShapeHandle> getHandles(const ShapeDef& shape);
+	// ---- Private helpers — shape management ----
+	static ShapeDef* findShape(Int id);
+	static Int       hitTestShape(Int tx, Int ty);
+	Bool             hitTestHandle(Int tx, Int ty, ShapeHandle& outHandle);
+	static std::vector<ShapeHandle> getHandles(const ShapeDef& shape);
 
-	static TileSet    rasterize(const ShapeDef& shape);
-	static TileSet    rasterizeRect(Int x0, Int y0, Int x1, Int y1, Int border);
-	static TileSet    rasterizeCircle(Int cx, Int cy, Int r, Int border);
-	static TileSet    rasterizePolygon(const std::vector<ShapeVertex>& pts, Int border,
-	                                   const std::vector<ShapeVertex>& innerPts = {});
-	static Bool       pointInPolygon(Int tx, Int ty, const std::vector<ShapeVertex>& pts);
+	void updateDragShape(Int tx, Int ty);
 
-	void              updateDragShape(Int tx, Int ty);
-	static void       drawShape(CDC* pDC, WbView* pView, const ShapeDef& shape, Bool selected);
-	static void       drawHandle(CDC* pDC, Int sx, Int sy, Bool active);
-	static void       drawInnerHandle(CDC* pDC, Int sx, Int sy);
-	static void       drawCoordLabel(CDC* pDC, Int sx, Int sy, Int tx, Int ty);
-	static void       viewToTile(WbView* pView, CPoint viewPt, Int& tx, Int& ty);
-	static void       tileToView(WbView* pView, Int tx, Int ty, Int& sx, Int& sy);
+	// ---- Private helpers — rasterization ----
+	static TileSet rasterize(const ShapeDef& shape);
+	static TileSet rasterizeRect(Int x0, Int y0, Int x1, Int y1, Int border);
+	static TileSet rasterizeCircle(Int cx, Int cy, Int r, Int border);
+	static TileSet rasterizePolygon(const std::vector<ShapeVertex>& pts, Int border,
+	                                const std::vector<ShapeVertex>& innerPts = {});
+	static Bool    pointInPolygon(Int tx, Int ty, const std::vector<ShapeVertex>& pts);
+
+	// ---- Private helpers — geometry ----
+	static void  rasterizeSegmentToEdges(Int cx0, Int cy0, Int cx1, Int cy1,
+	                                     std::vector<bool>& hEdge, std::vector<bool>& vEdge,
+	                                     Int playW, Int playH);
+	static float distToPolyEdge(float px, float py, const std::vector<ShapeVertex>& poly);
+	static bool  pointInPoly(float px, float py, const std::vector<ShapeVertex>& poly);
+	static std::pair<Int,Int>       clampToOuterShape(const ShapeDef& shape, Int tx, Int ty);
+	static std::vector<ShapeVertex> getEffectiveInner(const ShapeDef& shape);
+	static std::vector<ShapeVertex> insetPolygon(const std::vector<ShapeVertex>& pts, Real amount);
+
+	// ---- Private helpers — coordinate conversion ----
+	static void viewToTile(WbView* pView, CPoint viewPt, Int& tx, Int& ty);
+	static void tileToView(WbView* pView, Int tx, Int ty, Int& sx, Int& sy);
+	static void viewToCorner(WbView* pView, CPoint viewPt, Int& cx, Int& cy);
+	static void cornerToView(WbView* pView, Int cx, Int cy, Int& sx, Int& sy);
+	static void tileCenterToView(WbView* pView, Int tx, Int ty, Int& sx, Int& sy);
+
+	// ---- Private helpers — drawing ----
+	static void drawShape(CDC* pDC, WbView* pView, const ShapeDef& shape, Bool selected);
+	static void drawHandle(CDC* pDC, Int sx, Int sy, Bool active);
+	static void drawInnerHandle(CDC* pDC, Int sx, Int sy);
+	static void drawCoordLabel(CDC* pDC, Int sx, Int sy, Int tx, Int ty);
+	static void drawSegmentStaircase(CDC* pDC, WbView* pView, Int cx0, Int cy0, Int cx1, Int cy1);
+	static void drawCircleStaircase(CDC* pDC, WbView* pView, Int cx, Int cy, Int r);
+
+	// ---- Private helpers — misc ----
+	static void    invalidateBothViews();
+	static CString shapefillPath(const CString& mapPath);
 };

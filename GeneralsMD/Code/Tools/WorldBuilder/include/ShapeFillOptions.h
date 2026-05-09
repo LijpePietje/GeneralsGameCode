@@ -50,6 +50,7 @@ protected:
 	afx_msg void OnModeFill();
 	afx_msg void OnModeEdit();
 	afx_msg void OnClickClearLines();
+	afx_msg void OnAutoSave();
 
 	DECLARE_MESSAGE_MAP()
 

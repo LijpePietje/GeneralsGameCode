@@ -58,6 +58,7 @@
 #include "WorldBuilderDoc.h"
 #include "WorldBuilderView.h"
 #include "MapPreview.h"
+#include "ShapeFillTool.h"
 
 
 // Can't currently have multiple open... jba.
@@ -808,6 +809,10 @@ BOOL CWorldBuilderDoc::DoSave(LPCTSTR lpszPathName, BOOL bReplace)
 		return FALSE;
 	}
 
+	// Save shapefill sidecar if auto-save is enabled
+	if (ShapeFillTool::getAutoSave())
+		ShapeFillTool::saveShapes(newName);
+
 	// reset the title and change the document name
 	if (bReplace)
 		SetPathName(newName);
@@ -1425,6 +1430,9 @@ BOOL CWorldBuilderDoc::OnOpenDocument(LPCTSTR lpszPathName)
 		return FALSE;
 
 	Create3DView();
+
+	// Load shapefill sidecar if it exists next to the map file
+	ShapeFillTool::loadShapes(CString(lpszPathName));
 
 	return TRUE;
 }

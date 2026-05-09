@@ -46,9 +46,15 @@ BOOL ShapeFillOptions::OnInitDialog()
 	m_staticThis = this;
 	m_updating = false;
 
+	CheckDlgButton(IDC_SF_AUTO_SAVE, ShapeFillTool::getAutoSave() ? BST_CHECKED : BST_UNCHECKED);
 	updateFromTool();
 	updateTopDownState();
 	return TRUE;
+}
+
+void ShapeFillOptions::OnAutoSave()
+{
+	ShapeFillTool::setAutoSave(IsDlgButtonChecked(IDC_SF_AUTO_SAVE) == BST_CHECKED);
 }
 
 void ShapeFillOptions::updateFromTool()
@@ -393,7 +399,8 @@ void ShapeFillOptions::OnClick3D()
 {
 	if (!m_staticThis) return;
 	WbView3d* p3D = CWorldBuilderDoc::GetActive3DView();
-	bool topDown = p3D && p3D->getTopDownProjection();
+	// No 3D view = still show all controls (2D-only layout is always top-down)
+	bool topDown = !p3D || p3D->getTopDownProjection();
 
 	CWnd* pChild = m_staticThis->GetWindow(GW_CHILD);
 	while (pChild) {
@@ -483,4 +490,5 @@ BEGIN_MESSAGE_MAP(ShapeFillOptions, COptionsPanel)
 	ON_BN_CLICKED(IDC_SF_MODE_FILL,    OnModeFill)
 	ON_BN_CLICKED(IDC_SF_MODE_EDIT,    OnModeEdit)
 	ON_BN_CLICKED(IDC_SF_CLEAR_LINES,  OnClickClearLines)
+	ON_BN_CLICKED(IDC_SF_AUTO_SAVE,    OnAutoSave)
 END_MESSAGE_MAP()
