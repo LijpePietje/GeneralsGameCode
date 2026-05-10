@@ -8,13 +8,13 @@ What WorldBuilder always needed was something closer to a Photoshop workflow: dr
 
 With this tool you draw closed shapes — rectangles, circles, polygons — set a height and texture for the inside and the border ring, and hit Apply. The tool rasterizes the shape onto the tile grid and applies the height gradient in one step. The shape stays editable: move it, adjust the border width, drag individual inner polygon vertices to make asymmetric slopes, then Apply again. Undo/redo means you can experiment freely.
 
-![Three shapes drawn in 2D top-down view](img/01_shapes_drawn.png)
+![Three shapes drawn in 2D top-down view](img_TerrainPainter/01_shapes_drawn.png)
 *First, draw your shapes — Rect, Circle, Polygon. Set height and texture, then hit Apply.*
 
-![Three shapes drawn and applied to the terrain](img/02_shapes_applied.png)
+![Three shapes drawn and applied to the terrain](img_TerrainPainter/02_shapes_applied.png)
 *After Apply — inner texture, rocky border, and height gradient painted in one click.*
 
-![Result in 3D view](img/03_shapes_3d.png)
+![Result in 3D view](img_TerrainPainter/03_shapes_3d.png)
 *The same result seen from the 3D perspective view.*
 
 ---
@@ -111,22 +111,22 @@ By default the inner polygon is a uniform inset of the outer shape. In Edit mode
 
 > **Reset inner polygon:** adjust the **Border Width** slider — this clears the free-edited inner polygon and returns to a uniform inset.
 
-![Shapes with edited inner polygons](img/04_shapes_edited.png)
+![Shapes with edited inner polygons](img_TerrainPainter/04_shapes_edited.png)
 *Edit mode — orange diamond handles visible on each shape's inner polygon.*
 
-![Result after Apply with asymmetric slopes](img/05_shapes_edited-applied.png)
+![Result after Apply with asymmetric slopes](img_TerrainPainter/05_shapes_edited-applied.png)
 *After Apply — the distorted inner polygons produce irregular, asymmetric height gradients.*
 
-![Asymmetric result in 3D](img/06_shapes_edited-applied3D.png)
+![Asymmetric result in 3D](img_TerrainPainter/06_shapes_edited-applied3D.png)
 *3D view of the same result — each shape has a unique slope profile.*
 
-![Lines drawn as barriers between areas](img/07_Lines.png)
+![Lines drawn as barriers between areas](img_TerrainPainter/07_Lines.png)
 *Lines drawn to divide the map into separate areas, ready for flood fill.*
 
-![Areas filled with different textures using Fill mode](img/08_LinesFilled.png)
+![Areas filled with different textures using Fill mode](img_TerrainPainter/08_LinesFilled.png)
 *Each enclosed area filled independently with a different texture.*
 
-![Fill result in 3D view](img/09_LinesFilled3D.png)
+![Fill result in 3D view](img_TerrainPainter/09_LinesFilled3D.png)
 *The same result from the 3D perspective view.*
 
 ### Fill
