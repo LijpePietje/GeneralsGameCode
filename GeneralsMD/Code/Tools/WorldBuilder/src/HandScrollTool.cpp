@@ -30,6 +30,7 @@
 #include "WorldBuilder.h"
 #include "WorldBuilderDoc.h"
 #include "WorldBuilderView.h"
+#include "ShapeFillTool.h"
 //
 // HandScrollTool class.
 //
@@ -134,8 +135,11 @@ void HandScrollTool::mouseUp(TTrackingMode m, CPoint viewPt, WbView* pView, CWor
 			// Tell the view we are done scrolling.
 			pView->scrollInView(0,0,true);
 		} else if (m==TRACK_R) {
-			// Clicked right.  Deselect & go to pointer.
-			WbApp()->selectPointerTool();
+			// TheSuperHackers @fix Nemellud 10/05/2026 ShapeFillTool: don't switch to pointer on right-click
+			if (!ShapeFillTool::isActive()) {
+				// Clicked right.  Deselect & go to pointer.
+				WbApp()->selectPointerTool();
+			}
 		}
 	}
 }

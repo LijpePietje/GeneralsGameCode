@@ -13,6 +13,7 @@
 // Mouse handling: ShapeFillMouse.cpp
 // Rasterization: ShapeFillRasterize.cpp
 // Drawing: ShapeFillDraw.cpp
+// TheSuperHackers @feature Nemellud 09/05/2026 ShapeFillTool core: static state, lifecycle, shape management, undo/redo, and persistence
 
 #include "StdAfx.h"
 #include "resource.h"
@@ -41,11 +42,16 @@ ShapeDef              ShapeFillTool::m_clipboard;
 Bool                  ShapeFillTool::m_hasClipboard = false;
 Bool                  ShapeFillTool::m_isActive     = false;
 
-SFToolMode ShapeFillTool::m_mode          = SF_DRAW_RECT;
-Int        ShapeFillTool::m_innerHeight   = 10;
-Int        ShapeFillTool::m_outerHeight   = 0;
-Bool       ShapeFillTool::m_autoBlend     = true;
-Int        ShapeFillTool::m_borderWidth   = 5;
+SFToolMode ShapeFillTool::m_mode            = SF_DRAW_RECT;
+Int        ShapeFillTool::m_innerHeight     = 10;
+Int        ShapeFillTool::m_outerHeight     = 0;
+Bool       ShapeFillTool::m_autoBlend       = true;   // shapes: Out by default
+Bool       ShapeFillTool::m_blendInward     = false;
+Bool       ShapeFillTool::m_fillAutoBlend   = true;   // fill: In by default
+Bool       ShapeFillTool::m_fillBlendInward = true;
+Bool       ShapeFillTool::m_innerAutoBlend    = true;   // inner zone: Out by default
+Bool       ShapeFillTool::m_innerBlendInward = false;
+Int        ShapeFillTool::m_borderWidth     = 5;
 Int        ShapeFillTool::m_innerTexClass  = -1;
 Int        ShapeFillTool::m_borderTexClass = -1;
 Bool       ShapeFillTool::m_autoSave      = true;
@@ -57,8 +63,9 @@ Bool                    ShapeFillTool::m_polyDrawing = false;
 std::vector<ShapeVertex> ShapeFillTool::m_polyDraft;
 
 std::vector<LineDef>    ShapeFillTool::m_lines;
-Int                     ShapeFillTool::m_nextLineId  = 1;
-Bool                    ShapeFillTool::m_lineDrawing  = false;
+Int                     ShapeFillTool::m_nextLineId   = 1;
+Int                     ShapeFillTool::m_selectedLineId = -1;
+Bool                    ShapeFillTool::m_lineDrawing   = false;
 std::vector<ShapeVertex> ShapeFillTool::m_lineDraft;
 
 Bool ShapeFillTool::m_hasSnapCorner = false;
@@ -233,13 +240,14 @@ void ShapeFillTool::finishPolygon()
 // Apply to terrain
 // -------------------------------------------------------------------------
 
+// TheSuperHackers @feature Nemellud 10/05/2026 ShapeFillTool: apply shape to heightmap with
+// inner/border textures and three independent blend groups (outer, inner, fill).
 void ShapeFillTool::applySelectedShape(CWorldBuilderDoc* pDoc)
 {
 	if (m_selectedId < 0) return;
 	ShapeDef* shape = findShape(m_selectedId);
 	if (!shape) return;
 
-	// Sync panel settings into the shape before applying
 	shape->innerHeight    = m_innerHeight;
 	shape->outerHeight    = m_outerHeight;
 	shape->autoBlendOuter = m_autoBlend;
@@ -344,14 +352,88 @@ void ShapeFillTool::applySelectedShape(CWorldBuilderDoc* pDoc)
 				needsOptimize = true;
 	}
 
-	// Auto-blend outer edge: engine-level texture blend at the shape boundary
+	const Int dx4[] = {1, -1, 0,  0};
+	const Int dy4[] = {0,  0, 1, -1};
+
+	// Build shared lookups used by both blend sections
+	std::vector<bool> isInnerTile(mapW * mapH, false);
+	for (const CPoint& pt : tiles.inner) {
+		Int hx = pt.x + border, hy = pt.y + border;
+		if (hx >= 0 && hy >= 0 && hx < mapW && hy < mapH)
+			isInnerTile[hy * mapW + hx] = true;
+	}
+	std::vector<bool> isBorderTile(mapW * mapH, false);
+	for (const BorderTile& bt2 : tiles.border) {
+		Int hx = bt2.pt.x + border, hy = bt2.pt.y + border;
+		if (hx >= 0 && hy >= 0 && hx < mapW && hy < mapH)
+			isBorderTile[hy * mapW + hx] = true;
+	}
+
+	// --- Outer boundary blend ---
+	// TheSuperHackers @fix Nemellud 10/05/2026 ShapeFillTool: autoBlendOut propagates through all
+	// connected same-texture tiles via optimizeTiles(); only safe to call on exterior terrain tiles.
 	if (shape->autoBlendOuter && borderTex >= 0) {
+		// With free inner poly: dist is [0,1], blend only the outer 30% of the border.
+		// With uniform border: dist is tile count, blend within 2 tiles of the outer edge.
 		float blendThresh = hasInnerPoly ? 0.3f : 2.0f;
+		std::vector<bool> inShape(mapW * mapH, false);
+		for (Int i = 0; i < mapW * mapH; i++)
+			inShape[i] = isInnerTile[i] || isBorderTile[i];
+		std::vector<bool> done(mapW * mapH, false);
 		for (const BorderTile& bt : tiles.border) {
-			Int hx = bt.pt.x + border, hy = bt.pt.y + border;
-			if (hx < 0 || hy < 0 || hx >= mapW || hy >= mapH) continue;
-			if (bt.dist < blendThresh)
+			if (bt.dist >= blendThresh) continue;
+			for (Int d = 0; d < 4; d++) {
+				Int hx = bt.pt.x + border + dx4[d];
+				Int hy = bt.pt.y + border + dy4[d];
+				if (hx < 0 || hy < 0 || hx >= mapW || hy >= mapH) continue;
+				if (inShape[hy * mapW + hx]) continue;
+				if (done[hy * mapW + hx]) continue;
+				done[hy * mapW + hx] = true;
+				if (!m_blendInward) {
+					if (htMapCopy->setTileNdx(hx, hy, borderTex, false))
+						needsOptimize = true;
+				} else {
+					htMapCopy->autoBlendOut(hx, hy);
+				}
+			}
+		}
+	}
+
+	// --- Inner boundary blend ---
+	if (m_innerAutoBlend && innerTex >= 0 && !tiles.border.empty()) {
+		if (!m_innerBlendInward) {
+			// Out: autoBlendOut on inner zone tiles adjacent to border → inner tex bleeds toward border
+			for (const CPoint& pt : tiles.inner) {
+				Int hx = pt.x + border, hy = pt.y + border;
+				if (hx < 0 || hy < 0 || hx >= mapW || hy >= mapH) continue;
+				bool adjToBorder = false;
+				for (Int d = 0; d < 4 && !adjToBorder; d++) {
+					Int nx = hx + dx4[d], ny = hy + dy4[d];
+					if (nx >= 0 && ny >= 0 && nx < mapW && ny < mapH && isBorderTile[ny * mapW + nx])
+						adjToBorder = true;
+				}
+				if (!adjToBorder) continue;
 				htMapCopy->autoBlendOut(hx, hy);
+			}
+			needsOptimize = true;
+		} else {
+			// In: autoBlendOut on border tiles adjacent to inner zone → border tex bleeds into inner zone
+			std::vector<bool> doneBlend2(mapW * mapH, false);
+			for (const BorderTile& bt : tiles.border) {
+				Int hx = bt.pt.x + border, hy = bt.pt.y + border;
+				if (hx < 0 || hy < 0 || hx >= mapW || hy >= mapH) continue;
+				bool adjToInner = false;
+				for (Int d = 0; d < 4 && !adjToInner; d++) {
+					Int nx = hx + dx4[d], ny = hy + dy4[d];
+					if (nx >= 0 && ny >= 0 && nx < mapW && ny < mapH && isInnerTile[ny * mapW + nx])
+						adjToInner = true;
+				}
+				if (!adjToInner) continue;
+				if (doneBlend2[hy * mapW + hx]) continue;
+				doneBlend2[hy * mapW + hx] = true;
+				htMapCopy->autoBlendOut(hx, hy);
+			}
+			needsOptimize = true;
 		}
 	}
 
@@ -390,11 +472,23 @@ void ShapeFillTool::deleteSelectedShape()
 {
 	auto before = captureSnapshot();
 
-	m_shapes.erase(
-		std::remove_if(m_shapes.begin(), m_shapes.end(),
-			[](const ShapeDef& s) { return s.id == m_selectedId; }),
-		m_shapes.end());
-	m_selectedId = -1;
+	if (m_selectedId >= 0) {
+		m_shapes.erase(
+			std::remove_if(m_shapes.begin(), m_shapes.end(),
+				[](const ShapeDef& s) { return s.id == m_selectedId; }),
+			m_shapes.end());
+		m_selectedId = -1;
+	} else if (m_selectedLineId >= 0) {
+		Int lineId = m_selectedLineId;
+		m_lines.erase(
+			std::remove_if(m_lines.begin(), m_lines.end(),
+				[lineId](const LineDef& l) { return l.id == lineId; }),
+			m_lines.end());
+		m_selectedLineId = -1;
+	} else {
+		return;
+	}
+
 	ShapeFillOptions::updateFromTool();
 	invalidateBothViews();
 
@@ -579,5 +673,22 @@ void ShapeFillTool::clearLines()
 	m_lines.clear();
 	m_lineDrawing = false;
 	m_lineDraft.clear();
+	m_selectedLineId = -1;
+	invalidateBothViews();
+}
+
+void ShapeFillTool::commitCurrentLine()
+{
+	if (m_lineDrawing && (Int)m_lineDraft.size() >= 2) {
+		auto before = captureSnapshot();
+		LineDef line;
+		line.id     = m_nextLineId++;
+		line.points = m_lineDraft;
+		m_lines.push_back(line);
+		pushUndo(getActiveDoc(), before);
+	}
+	m_lineDrawing = false;
+	m_lineDraft.clear();
+	ShapeFillOptions::updateFromTool();
 	invalidateBothViews();
 }

@@ -10,8 +10,10 @@
 
 // ShapeFillOptions.cpp
 // Options dialog for the Shape Fill Tool.
+// TheSuperHackers @feature Nemellud 09/05/2026 ShapeFillTool options panel: UI controls, mode switching, shape/line list
 
 #include "StdAfx.h"
+#include <shellapi.h>
 #include "resource.h"
 #include "Lib/BaseType.h"
 #include "ShapeFillOptions.h"
@@ -57,6 +59,13 @@ void ShapeFillOptions::OnAutoSave()
 	ShapeFillTool::setAutoSave(IsDlgButtonChecked(IDC_SF_AUTO_SAVE) == BST_CHECKED);
 }
 
+void ShapeFillOptions::OnClickHelp()
+{
+	ShellExecute(NULL, "open",
+		"https://github.com/LijpePietje/ProjectWorldbuilder/blob/feature/map-reader/worldbuilder-cpp/ShapeFillTool/USAGE.md",
+		NULL, NULL, SW_SHOWNORMAL);
+}
+
 void ShapeFillOptions::updateFromTool()
 {
 	if (!m_staticThis || m_staticThis->m_updating) return;
@@ -76,31 +85,66 @@ void ShapeFillOptions::updateFromTool()
 	pEdit = m_staticThis->GetDlgItem(IDC_SF_BORDER_WIDTH_EDIT);
 	if (pEdit) pEdit->SetWindowText(buf);
 
-	// Auto blend checkbox + enable/disable outer height controls
-	Bool autoBlend = ShapeFillTool::getAutoBlend();
-	CButton* pCheck = (CButton*)m_staticThis->GetDlgItem(IDC_SF_AUTO_BLEND);
-	if (pCheck) pCheck->SetCheck(autoBlend ? BST_CHECKED : BST_UNCHECKED);
+	// Border Blend radio buttons (shapes)
+	Bool autoBlend   = ShapeFillTool::getAutoBlend();
+	Bool blendInward = ShapeFillTool::getBlendInward();
+	CButton* pNone = (CButton*)m_staticThis->GetDlgItem(IDC_SF_AUTO_BLEND);
+	CButton* pOut  = (CButton*)m_staticThis->GetDlgItem(IDC_SF_BLEND_OUT);
+	CButton* pIn   = (CButton*)m_staticThis->GetDlgItem(IDC_SF_BLEND_IN);
+	if (pNone) pNone->SetCheck(!autoBlend               ? BST_CHECKED : BST_UNCHECKED);
+	if (pOut)  pOut ->SetCheck(autoBlend && !blendInward ? BST_CHECKED : BST_UNCHECKED);
+	if (pIn)   pIn  ->SetCheck(autoBlend &&  blendInward ? BST_CHECKED : BST_UNCHECKED);
+	// Border blend active → outer height driven by terrain, disable manual edit
 	CWnd* pOuterEdit  = m_staticThis->GetDlgItem(IDC_SF_OUTER_HEIGHT_EDIT);
 	CWnd* pOuterPopup = m_staticThis->GetDlgItem(IDC_SF_OUTER_HEIGHT_POPUP);
 	if (pOuterEdit)  pOuterEdit->EnableWindow(!autoBlend);
 	if (pOuterPopup) pOuterPopup->EnableWindow(!autoBlend);
 
+	// Fill Blend radio buttons
+	Bool fillAuto    = ShapeFillTool::getFillAutoBlend();
+	Bool fillInward  = ShapeFillTool::getFillBlendInward();
+	CButton* pFNone = (CButton*)m_staticThis->GetDlgItem(IDC_SF_FILL_BLEND_NONE);
+	CButton* pFOut  = (CButton*)m_staticThis->GetDlgItem(IDC_SF_FILL_BLEND_OUT);
+	CButton* pFIn   = (CButton*)m_staticThis->GetDlgItem(IDC_SF_FILL_BLEND_IN);
+	if (pFNone) pFNone->SetCheck(!fillAuto              ? BST_CHECKED : BST_UNCHECKED);
+	if (pFOut)  pFOut ->SetCheck(fillAuto && !fillInward ? BST_CHECKED : BST_UNCHECKED);
+	if (pFIn)   pFIn  ->SetCheck(fillAuto &&  fillInward ? BST_CHECKED : BST_UNCHECKED);
+
+	// Inner Blend radio buttons (shapes)
+	Bool innerAuto    = ShapeFillTool::getInnerAutoBlend();
+	Bool innerInward  = ShapeFillTool::getInnerBlendInward();
+	CButton* pINone = (CButton*)m_staticThis->GetDlgItem(IDC_SF_INNER_BLEND_NONE);
+	CButton* pIOut  = (CButton*)m_staticThis->GetDlgItem(IDC_SF_INNER_BLEND_OUT);
+	CButton* pIIn   = (CButton*)m_staticThis->GetDlgItem(IDC_SF_INNER_BLEND_IN);
+	if (pINone) pINone->SetCheck(!innerAuto                ? BST_CHECKED : BST_UNCHECKED);
+	if (pIOut)  pIOut ->SetCheck(innerAuto && !innerInward ? BST_CHECKED : BST_UNCHECKED);
+	if (pIIn)   pIIn  ->SetCheck(innerAuto &&  innerInward ? BST_CHECKED : BST_UNCHECKED);
+
 	m_staticThis->refreshModeButtons();
 	m_staticThis->refreshTexButtons();
 
-	// Populate shape list
+	// Populate shape + line list
 	CListBox* pList = (CListBox*)m_staticThis->GetDlgItem(IDC_SF_SHAPE_LIST);
 	if (pList) {
 		pList->ResetContent();
 		const auto& shapes = ShapeFillTool::getShapes();
 		for (const auto& s : shapes) {
 			CString name;
-			if (s.type == SHAPE_RECT)    name.Format("Rect #%d", s.id);
+			if (s.type == SHAPE_RECT)        name.Format("Rect #%d", s.id);
 			else if (s.type == SHAPE_CIRCLE) name.Format("Circle #%d", s.id);
-			else                         name.Format("Polygon #%d", s.id);
+			else                             name.Format("Polygon #%d", s.id);
 			Int idx = pList->AddString(name);
 			pList->SetItemData(idx, (DWORD_PTR)s.id);
 			if (s.id == ShapeFillTool::getSelectedId())
+				pList->SetCurSel(idx);
+		}
+		const auto& lines = ShapeFillTool::getLines();
+		for (const auto& l : lines) {
+			CString name;
+			name.Format("Line #%d", l.id);
+			Int idx = pList->AddString(name);
+			pList->SetItemData(idx, (DWORD_PTR)(-(l.id + 1)));  // negative = line
+			if (l.id == ShapeFillTool::getSelectedLineId())
 				pList->SetCurSel(idx);
 		}
 	}
@@ -192,6 +236,11 @@ void ShapeFillOptions::OnClickClearLines()
 	updateFromTool();
 }
 
+void ShapeFillOptions::OnClickFinishLine()
+{
+	ShapeFillTool::commitCurrentLine();
+}
+
 void ShapeFillOptions::OnClickFinishPoly()
 {
 	ShapeFillTool::finishPolygon();
@@ -266,18 +315,73 @@ void ShapeFillOptions::OnChangeBorderWidth()
 	}
 }
 
-void ShapeFillOptions::OnAutoBlendChanged()
+void ShapeFillOptions::OnBlendNone()
 {
-	CButton* pCheck = (CButton*)GetDlgItem(IDC_SF_AUTO_BLEND);
-	if (!pCheck) return;
-	ShapeFillTool::setAutoBlend(pCheck->GetCheck() == BST_CHECKED);
-	// Enable/disable outer height controls
-	Bool autoBlend = ShapeFillTool::getAutoBlend();
+	ShapeFillTool::setAutoBlend(false);
+	ShapeFillTool::setBlendInward(false);
 	CWnd* pOuterEdit  = GetDlgItem(IDC_SF_OUTER_HEIGHT_EDIT);
 	CWnd* pOuterPopup = GetDlgItem(IDC_SF_OUTER_HEIGHT_POPUP);
-	if (pOuterEdit)  pOuterEdit->EnableWindow(!autoBlend);
-	if (pOuterPopup) pOuterPopup->EnableWindow(!autoBlend);
+	if (pOuterEdit)  pOuterEdit->EnableWindow(true);
+	if (pOuterPopup) pOuterPopup->EnableWindow(true);
 	syncAndRedraw();
+}
+
+void ShapeFillOptions::OnBlendOut()
+{
+	ShapeFillTool::setAutoBlend(true);
+	ShapeFillTool::setBlendInward(false);
+	CWnd* pOuterEdit  = GetDlgItem(IDC_SF_OUTER_HEIGHT_EDIT);
+	CWnd* pOuterPopup = GetDlgItem(IDC_SF_OUTER_HEIGHT_POPUP);
+	if (pOuterEdit)  pOuterEdit->EnableWindow(false);
+	if (pOuterPopup) pOuterPopup->EnableWindow(false);
+	syncAndRedraw();
+}
+
+void ShapeFillOptions::OnBlendIn()
+{
+	ShapeFillTool::setAutoBlend(true);
+	ShapeFillTool::setBlendInward(true);
+	CWnd* pOuterEdit  = GetDlgItem(IDC_SF_OUTER_HEIGHT_EDIT);
+	CWnd* pOuterPopup = GetDlgItem(IDC_SF_OUTER_HEIGHT_POPUP);
+	if (pOuterEdit)  pOuterEdit->EnableWindow(false);
+	if (pOuterPopup) pOuterPopup->EnableWindow(false);
+	syncAndRedraw();
+}
+
+void ShapeFillOptions::OnFillBlendNone()
+{
+	ShapeFillTool::setFillAutoBlend(false);
+	ShapeFillTool::setFillBlendInward(false);
+}
+
+void ShapeFillOptions::OnFillBlendOut()
+{
+	ShapeFillTool::setFillAutoBlend(true);
+	ShapeFillTool::setFillBlendInward(false);
+}
+
+void ShapeFillOptions::OnFillBlendIn()
+{
+	ShapeFillTool::setFillAutoBlend(true);
+	ShapeFillTool::setFillBlendInward(true);
+}
+
+void ShapeFillOptions::OnInnerBlendNone()
+{
+	ShapeFillTool::setInnerAutoBlend(false);
+	ShapeFillTool::setInnerBlendInward(false);
+}
+
+void ShapeFillOptions::OnInnerBlendOut()
+{
+	ShapeFillTool::setInnerAutoBlend(true);
+	ShapeFillTool::setInnerBlendInward(false);
+}
+
+void ShapeFillOptions::OnInnerBlendIn()
+{
+	ShapeFillTool::setInnerAutoBlend(true);
+	ShapeFillTool::setInnerBlendInward(true);
 }
 
 // -------------------------------------------------------------------------
@@ -372,10 +476,16 @@ void ShapeFillOptions::OnShapeListSelChanged()
 	if (!pList) return;
 	Int sel = pList->GetCurSel();
 	if (sel == LB_ERR) return;
-	Int shapeId = (Int)pList->GetItemData(sel);
-	ShapeFillTool::setSelectedId(shapeId);
-	ShapeFillTool::setMode(SF_SELECT);
-	refreshModeButtons();
+	Int data = (Int)pList->GetItemData(sel);
+	if (data >= 0) {
+		ShapeFillTool::setSelectedId(data);
+		ShapeFillTool::setSelectedLineId(-1);
+		ShapeFillTool::setMode(SF_SELECT);
+		refreshModeButtons();
+	} else {
+		ShapeFillTool::setSelectedLineId(-(data + 1));
+		ShapeFillTool::setSelectedId(-1);
+	}
 	CWorldBuilderView* p2D = CWorldBuilderDoc::GetActive2DView();
 	WbView3d* p3D = CWorldBuilderDoc::GetActive3DView();
 	if (p2D) p2D->Invalidate(false);
@@ -450,23 +560,40 @@ void ShapeFillOptions::refreshModeUI()
 	enable(IDC_SF_BORDER_WIDTH_EDIT,  !isEdit);
 	enable(IDC_SF_BORDER_WIDTH_POPUP, !isEdit);
 
-	// Textures: inner tex for shapes + fill; border tex + auto-blend for shapes only
+	// Textures: inner tex for shapes + fill; border tex for shapes only
 	show(IDC_SF_INNER_TEX_BTN,   isShape || isFill);
 	show(IDC_SF_BORDER_TEX_BTN,  isShape);
-	show(IDC_SF_AUTO_BLEND,      isShape);
+
+	// Inner Blend group: shapes only (None / Out / In)
+	show(IDC_SF_INNER_BLEND_GRP,  isShape);
+	show(IDC_SF_INNER_BLEND_NONE, isShape);
+	show(IDC_SF_INNER_BLEND_OUT,  isShape);
+	show(IDC_SF_INNER_BLEND_IN,   isShape);
+	// Outer Blend group: shapes only (None / Out / In)
+	show(IDC_SF_BORDER_BLEND_GRP, isShape);
+	show(IDC_SF_AUTO_BLEND,       isShape);
+	show(IDC_SF_BLEND_OUT,        isShape);
+	show(IDC_SF_BLEND_IN,         isShape);
+	// Fill Blend group: fill mode only
+	show(IDC_SF_FILL_BLEND_GRP,   isFill);
+	show(IDC_SF_FILL_BLEND_NONE,  isFill);
+	show(IDC_SF_FILL_BLEND_OUT,   isFill);
+	show(IDC_SF_FILL_BLEND_IN,    isFill);
 
 	// Actions: shapes only (in edit mode: only Apply, no shape management)
 	show(IDC_SF_APPLY_BTN,  isShape);
-	show(IDC_SF_DELETE_BTN, isShape && !isEdit);
 	show(IDC_SF_COPY_BTN,   isShape && !isEdit);
 	show(IDC_SF_FLIP_H_BTN, isShape && !isEdit);
 	show(IDC_SF_FLIP_V_BTN, isShape && !isEdit);
 
-	// Line-specific: clear lines button
-	show(IDC_SF_CLEAR_LINES, isLine);
+	// Line-specific buttons
+	show(IDC_SF_CLEAR_LINES,  isLine);
+	show(IDC_SF_FINISH_LINE,  isLine);
+	// Delete works for selected lines too
+	show(IDC_SF_DELETE_BTN, (isShape && !isEdit) || isLine);
 
-	// Shape list: shapes only but not in edit mode (focus is on vertex editing)
-	show(IDC_SF_SHAPE_LIST, isShape && !isEdit);
+	// Shape + line list: visible in shape and line modes (not in edit mode)
+	show(IDC_SF_SHAPE_LIST, (isShape || isLine) && !isEdit);
 }
 
 BEGIN_MESSAGE_MAP(ShapeFillOptions, COptionsPanel)
@@ -485,7 +612,15 @@ BEGIN_MESSAGE_MAP(ShapeFillOptions, COptionsPanel)
 	ON_EN_CHANGE(IDC_SF_INNER_HEIGHT_EDIT, OnChangeInnerHeight)
 	ON_EN_CHANGE(IDC_SF_OUTER_HEIGHT_EDIT, OnChangeOuterHeight)
 	ON_EN_CHANGE(IDC_SF_BORDER_WIDTH_EDIT, OnChangeBorderWidth)
-	ON_BN_CLICKED(IDC_SF_AUTO_BLEND,   OnAutoBlendChanged)
+	ON_BN_CLICKED(IDC_SF_AUTO_BLEND,      OnBlendNone)
+	ON_BN_CLICKED(IDC_SF_BLEND_OUT,       OnBlendOut)
+	ON_BN_CLICKED(IDC_SF_BLEND_IN,        OnBlendIn)
+	ON_BN_CLICKED(IDC_SF_FILL_BLEND_NONE,  OnFillBlendNone)
+	ON_BN_CLICKED(IDC_SF_FILL_BLEND_OUT,   OnFillBlendOut)
+	ON_BN_CLICKED(IDC_SF_FILL_BLEND_IN,    OnFillBlendIn)
+	ON_BN_CLICKED(IDC_SF_INNER_BLEND_NONE, OnInnerBlendNone)
+	ON_BN_CLICKED(IDC_SF_INNER_BLEND_OUT,  OnInnerBlendOut)
+	ON_BN_CLICKED(IDC_SF_INNER_BLEND_IN,   OnInnerBlendIn)
 	ON_LBN_SELCHANGE(IDC_SF_SHAPE_LIST, OnShapeListSelChanged)
 	ON_BN_CLICKED(IDC_SF_TOPDOWN_BTN,  OnClickTopDown)
 	ON_BN_CLICKED(IDC_SF_3D_BTN,       OnClick3D)
@@ -493,5 +628,7 @@ BEGIN_MESSAGE_MAP(ShapeFillOptions, COptionsPanel)
 	ON_BN_CLICKED(IDC_SF_MODE_FILL,    OnModeFill)
 	ON_BN_CLICKED(IDC_SF_MODE_EDIT,    OnModeEdit)
 	ON_BN_CLICKED(IDC_SF_CLEAR_LINES,  OnClickClearLines)
+	ON_BN_CLICKED(IDC_SF_FINISH_LINE,  OnClickFinishLine)
 	ON_BN_CLICKED(IDC_SF_AUTO_SAVE,    OnAutoSave)
+	ON_BN_CLICKED(IDC_SF_HELP_BTN,    OnClickHelp)
 END_MESSAGE_MAP()

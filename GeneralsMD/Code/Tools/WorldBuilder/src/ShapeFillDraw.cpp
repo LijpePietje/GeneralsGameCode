@@ -10,6 +10,7 @@
 
 // ShapeFillDraw.cpp
 // Overlay drawing, coordinate conversion, and handle rendering for ShapeFillTool.
+// TheSuperHackers @feature Nemellud 09/05/2026 ShapeFillTool drawing: overlay, staircase segments, handles, coordinate conversion
 
 #include "StdAfx.h"
 #include "ShapeFillTool.h"
@@ -391,11 +392,12 @@ void ShapeFillTool::drawOverlayStatic(CDC* /*pDC_unused*/, WbView* pView)
 
 	// Committed lines
 	if (!m_lines.empty()) {
-		CPen linePen(PS_SOLID, 2, RGB(255, 120, 30));
-		CPen* oldPen = pDC->SelectObject(&linePen);
 		pDC->SelectStockObject(NULL_BRUSH);
 		for (const auto& line : m_lines) {
 			if (line.points.size() < 2) continue;
+			Bool sel = (line.id == m_selectedLineId);
+			CPen pen(PS_SOLID, sel ? 3 : 2, sel ? RGB(255, 220, 0) : RGB(255, 120, 30));
+			CPen* oldPen = pDC->SelectObject(&pen);
 			for (Int i = 1; i < (Int)line.points.size(); i++) {
 				drawSegmentStaircase(pDC, pView,
 					line.points[i-1].tx, line.points[i-1].ty,
@@ -406,8 +408,8 @@ void ShapeFillTool::drawOverlayStatic(CDC* /*pDC_unused*/, WbView* pView)
 				cornerToView(pView, pt.tx, pt.ty, sx, sy);
 				pDC->Ellipse(sx-3, sy-3, sx+3, sy+3);
 			}
+			pDC->SelectObject(oldPen);
 		}
-		pDC->SelectObject(oldPen);
 	}
 
 	// Current line draft (dashed — not yet committed)

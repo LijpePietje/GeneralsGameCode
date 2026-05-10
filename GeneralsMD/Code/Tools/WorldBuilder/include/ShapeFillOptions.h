@@ -39,7 +39,15 @@ protected:
 	afx_msg void OnChangeInnerHeight();
 	afx_msg void OnChangeOuterHeight();
 	afx_msg void OnChangeBorderWidth();
-	afx_msg void OnAutoBlendChanged();
+	afx_msg void OnBlendNone();
+	afx_msg void OnBlendOut();
+	afx_msg void OnBlendIn();
+	afx_msg void OnFillBlendNone();
+	afx_msg void OnFillBlendOut();
+	afx_msg void OnFillBlendIn();
+	afx_msg void OnInnerBlendNone();
+	afx_msg void OnInnerBlendOut();
+	afx_msg void OnInnerBlendIn();
 	afx_msg void OnSelectInnerTex();
 	afx_msg void OnSelectBorderTex();
 	afx_msg void OnShapeListSelChanged();
@@ -49,7 +57,9 @@ protected:
 	afx_msg void OnModeFill();
 	afx_msg void OnModeEdit();
 	afx_msg void OnClickClearLines();
+	afx_msg void OnClickFinishLine();
 	afx_msg void OnAutoSave();
+	afx_msg void OnClickHelp();
 
 	DECLARE_MESSAGE_MAP()
 

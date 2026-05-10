@@ -607,6 +607,19 @@
 #define IDC_SF_3D_BTN                   1410
 #define IDC_SF_MODE_EDIT                1411
 #define IDC_SF_AUTO_SAVE                1412
+#define IDC_SF_HELP_BTN                 1413
+#define IDC_SF_FINISH_LINE              1414
+#define IDC_SF_BLEND_OUT                1415
+#define IDC_SF_BLEND_IN                 1416
+#define IDC_SF_FILL_BLEND_NONE          1417
+#define IDC_SF_FILL_BLEND_OUT           1418
+#define IDC_SF_FILL_BLEND_IN            1419
+#define IDC_SF_BORDER_BLEND_GRP         1420
+#define IDC_SF_FILL_BLEND_GRP           1421
+#define IDC_SF_INNER_BLEND_NONE         1422
+#define IDC_SF_INNER_BLEND_OUT          1423
+#define IDC_SF_INNER_BLEND_GRP          1424
+#define IDC_SF_INNER_BLEND_IN           1425
 
 #define ID_BRUSH_TOOL                   32771
 #define IDM_ShowGrid                    32772

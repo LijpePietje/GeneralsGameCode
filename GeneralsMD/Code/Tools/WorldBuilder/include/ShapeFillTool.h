@@ -11,6 +11,7 @@
 // ShapeFillTool.h
 // Terrain & Texture Painter — shape-based terrain painting tool for WorldBuilder.
 // Draw rect/circle/polygon shapes, assign texture + height, apply to terrain.
+// TheSuperHackers @feature Nemellud 09/05/2026 Adds Terrain & Texture Painter: shape-based height and texture painting tool for WorldBuilder
 
 #pragma once
 
@@ -159,6 +160,7 @@ public:
 	static void setInnerHeight(Int h)    { m_innerHeight = h; }
 	static void setOuterHeight(Int h)    { m_outerHeight = h; }
 	static void setAutoBlend(Bool b)     { m_autoBlend = b; }
+	static void setBlendInward(Bool b)   { m_blendInward = b; }
 	static void setBorderWidth(Int w)    {
 		m_borderWidth = w;
 		if (m_selectedId >= 0) {
@@ -176,12 +178,23 @@ public:
 	static Int  getInnerHeight()    { return m_innerHeight; }
 	static Int  getOuterHeight()    { return m_outerHeight; }
 	static Bool getAutoBlend()      { return m_autoBlend; }
+	static Bool getBlendInward()    { return m_blendInward; }
 	static Int  getBorderWidth()    { return m_borderWidth; }
 	static Int  getInnerTexClass()  { return m_innerTexClass; }
 	static Int  getBorderTexClass() { return m_borderTexClass; }
 
 	static Bool getAutoSave()       { return m_autoSave; }
 	static void setAutoSave(Bool b) { m_autoSave = b; }
+
+	static Bool getFillAutoBlend()        { return m_fillAutoBlend; }
+	static Bool getFillBlendInward()      { return m_fillBlendInward; }
+	static void setFillAutoBlend(Bool b)  { m_fillAutoBlend = b; }
+	static void setFillBlendInward(Bool b){ m_fillBlendInward = b; }
+
+	static Bool getInnerAutoBlend()          { return m_innerAutoBlend; }
+	static Bool getInnerBlendInward()        { return m_innerBlendInward; }
+	static void setInnerAutoBlend(Bool b)    { m_innerAutoBlend = b; }
+	static void setInnerBlendInward(Bool b)  { m_innerBlendInward = b; }
 
 	static Int  getSelectedId()    { return m_selectedId; }
 	static void setSelectedId(Int id) { m_selectedId = id; }
@@ -193,8 +206,11 @@ public:
 
 	// Line tool
 	static void clearLines();
+	static void commitCurrentLine();
 	static void bucketFill(CWorldBuilderDoc* pDoc, Int tx, Int ty);
 	static const std::vector<LineDef>& getLines() { return m_lines; }
+	static Int  getSelectedLineId()       { return m_selectedLineId; }
+	static void setSelectedLineId(Int id) { m_selectedLineId = id; }
 
 	// Persistence
 	static void saveShapes(const CString& mapPath);
@@ -224,6 +240,11 @@ private:
 	static Int        m_innerHeight;
 	static Int        m_outerHeight;
 	static Bool       m_autoBlend;
+	static Bool       m_blendInward;
+	static Bool       m_fillAutoBlend;
+	static Bool       m_fillBlendInward;
+	static Bool       m_innerAutoBlend;
+	static Bool       m_innerBlendInward;
 	static Int        m_borderWidth;
 	static Int        m_innerTexClass;
 	static Int        m_borderTexClass;
@@ -240,6 +261,7 @@ private:
 	// Line drawing state
 	static std::vector<LineDef>    m_lines;
 	static Int                     m_nextLineId;
+	static Int                     m_selectedLineId;
 	static Bool                    m_lineDrawing;
 	static std::vector<ShapeVertex> m_lineDraft;
 

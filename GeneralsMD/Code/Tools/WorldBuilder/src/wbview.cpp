@@ -182,9 +182,9 @@ void WbView::mouseDown(TTrackingMode m, CPoint viewPt)
 	m_mouseDownPoint = viewPt;
 	viewToDocCoords(viewPt, &m_mouseDownDocPoint);
 	m_trackingMode = m;
-	// ShapeFillTool handles right-click in 2D only; 3D view keeps standard behavior.
-	Bool is3DView = (dynamic_cast<WbView3d*>(this) != nullptr);
-	Bool forceHand = (m == TRACK_R || m == TRACK_M) && (!ShapeFillTool::isActive() || is3DView);
+	// ShapeFillTool handles right-click in drawing modes; Select mode keeps standard pan behavior.
+	Bool shapeFillConsumesRClick = ShapeFillTool::isActive() && (ShapeFillTool::getMode() != SF_SELECT);
+	Bool forceHand = (m == TRACK_R || m == TRACK_M) && !shapeFillConsumesRClick;
 	WbApp()->updateCurTool(forceHand);
 	WbApp()->lockCurTool();
 	// If we have a tool, invoke it's mouse down method.

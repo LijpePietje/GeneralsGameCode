@@ -10,6 +10,7 @@
 
 // ShapeFillRasterize.cpp
 // Rasterization, geometry helpers, and bucket fill for ShapeFillTool.
+// TheSuperHackers @feature Nemellud 09/05/2026 ShapeFillTool rasterization: rect/circle/polygon rasterizers, inset polygon, bucket fill
 
 #include "StdAfx.h"
 #include "ShapeFillTool.h"
@@ -341,7 +342,7 @@ void ShapeFillTool::bucketFill(CWorldBuilderDoc* pDoc, Int startTx, Int startTy)
 		}
 	}
 
-	// BFS flood fill using edge connectivity
+	// BFS flood fill — build visited set only (texture applied afterward)
 	std::vector<bool> visited(playW * playH, false);
 	std::queue<CPoint> q;
 	q.push(CPoint(startTx, startTy));
@@ -350,28 +351,77 @@ void ShapeFillTool::bucketFill(CWorldBuilderDoc* pDoc, Int startTx, Int startTy)
 	const Int dx4[] = {1, -1, 0,  0};
 	const Int dy4[] = {0,  0, 1, -1};
 
-	Bool needsOptimize = false;
 	while (!q.empty()) {
 		CPoint pt = q.front(); q.pop();
-		Int hx = pt.x + border, hy = pt.y + border;
-		if (htMapCopy->setTileNdx(hx, hy, fillTexClass, false))
-			needsOptimize = true;
-
 		for (Int d = 0; d < 4; d++) {
 			Int nx = pt.x + dx4[d], ny = pt.y + dy4[d];
 			if (nx < 0 || ny < 0 || nx >= playW || ny >= playH) continue;
 			if (visited[ny * playW + nx]) continue;
-
 			bool blocked = false;
 			if      (dx4[d] ==  1) blocked = vEdge[pt.y * playW + pt.x];
 			else if (dx4[d] == -1) blocked = vEdge[pt.y * playW + (pt.x - 1)];
 			else if (dy4[d] ==  1) blocked = hEdge[pt.y * playW + pt.x];
 			else                   blocked = hEdge[(pt.y - 1) * playW + pt.x];
-
 			if (blocked) continue;
 			visited[ny * playW + nx] = true;
 			q.push(CPoint(nx, ny));
 		}
+	}
+
+	// Identify boundary tiles (visited tiles adjacent to non-visited tiles)
+	std::vector<bool> boundary(playW * playH, false);
+	if (m_fillAutoBlend && fillTexClass >= 0) {
+		for (Int ty = 0; ty < playH; ty++) {
+			for (Int tx = 0; tx < playW; tx++) {
+				if (!visited[ty * playW + tx]) continue;
+				if ((tx > 0       && !visited[ ty      * playW + (tx-1)]) ||
+				    (tx < playW-1 && !visited[ ty      * playW + (tx+1)]) ||
+				    (ty > 0       && !visited[(ty-1)   * playW +  tx   ]) ||
+				    (ty < playH-1 && !visited[(ty+1)   * playW +  tx   ]))
+					boundary[ty * playW + tx] = true;
+			}
+		}
+	}
+
+	// TheSuperHackers @fix Nemellud 10/05/2026 ShapeFillTool: In blend calls autoBlendOut on exterior tiles so blend starts at boundary line
+	// Apply fill texture to all visited tiles
+	Bool needsOptimize = false;
+	for (Int ty = 0; ty < playH; ty++) {
+		for (Int tx = 0; tx < playW; tx++) {
+			if (!visited[ty * playW + tx]) continue;
+			Int hx = tx + border, hy = ty + border;
+			if (htMapCopy->setTileNdx(hx, hy, fillTexClass, false))
+				needsOptimize = true;
+		}
+	}
+
+	if (m_fillAutoBlend && fillTexClass >= 0) {
+		if (!m_fillBlendInward) {
+			// Out: autoBlendOut on fill boundary tiles → fill texture bleeds out into surrounding terrain
+			for (Int ty = 0; ty < playH; ty++) {
+				for (Int tx = 0; tx < playW; tx++) {
+					if (!boundary[ty * playW + tx]) continue;
+					Int hx = tx + border, hy = ty + border;
+					htMapCopy->autoBlendOut(hx, hy);
+				}
+			}
+		} else {
+			// In: autoBlendOut on exterior tiles adjacent to fill boundary → existing terrain bleeds in from the boundary line
+			for (Int ty = 0; ty < playH; ty++) {
+				for (Int tx = 0; tx < playW; tx++) {
+					if (visited[ty * playW + tx]) continue;
+					bool adjToBoundary =
+						(tx > 0       && boundary[ ty      * playW + (tx-1)]) ||
+						(tx < playW-1 && boundary[ ty      * playW + (tx+1)]) ||
+						(ty > 0       && boundary[(ty-1)   * playW +  tx   ]) ||
+						(ty < playH-1 && boundary[(ty+1)   * playW +  tx   ]);
+					if (!adjToBoundary) continue;
+					Int hx = tx + border, hy = ty + border;
+					htMapCopy->autoBlendOut(hx, hy);
+				}
+			}
+		}
+		needsOptimize = true;
 	}
 
 	if (needsOptimize) htMapCopy->optimizeTiles();
@@ -391,18 +441,20 @@ void ShapeFillTool::bucketFill(CWorldBuilderDoc* pDoc, Int startTx, Int startTy)
 
 TileSet ShapeFillTool::rasterize(const ShapeDef& shape)
 {
+	// Always use at least 1 tile of border so the height cliff falls inside the shape boundary,
+	// not outside it. applySelectedShape already uses bwf=1.0f when borderWidth==0.
+	Int rb = std::max(shape.borderWidth, 1);
+
 	if (shape.type == SHAPE_RECT) {
 		if (!shape.innerPoints.empty()) {
-			// Rect with free inner polygon: treat outer rect as polygon for normalized distance
 			Int minX = std::min(shape.x0, shape.x1), maxX = std::max(shape.x0, shape.x1);
 			Int minY = std::min(shape.y0, shape.y1), maxY = std::max(shape.y0, shape.y1);
 			std::vector<ShapeVertex> outerPts = {{minX,minY},{maxX,minY},{maxX,maxY},{minX,maxY}};
-			return rasterizePolygon(outerPts, shape.borderWidth, shape.innerPoints);
+			return rasterizePolygon(outerPts, rb, shape.innerPoints);
 		}
-		return rasterizeRect(shape.x0, shape.y0, shape.x1, shape.y1, shape.borderWidth);
+		return rasterizeRect(shape.x0, shape.y0, shape.x1, shape.y1, rb);
 	} else if (shape.type == SHAPE_CIRCLE) {
 		if (!shape.innerPoints.empty() && (Int)shape.innerPoints.size() >= 3) {
-			// Circle with free inner polygon: approximate outer circle as polygon
 			const Int N = 24;
 			const float kPi = 3.14159265f;
 			std::vector<ShapeVertex> outerPoly;
@@ -411,11 +463,11 @@ TileSet ShapeFillTool::rasterize(const ShapeDef& shape)
 				outerPoly.push_back({shape.cx + (Int)roundf(shape.r * cosf(angle)),
 				                     shape.cy + (Int)roundf(shape.r * sinf(angle))});
 			}
-			return rasterizePolygon(outerPoly, shape.borderWidth, shape.innerPoints);
+			return rasterizePolygon(outerPoly, rb, shape.innerPoints);
 		}
-		return rasterizeCircle(shape.cx, shape.cy, shape.r, shape.borderWidth);
+		return rasterizeCircle(shape.cx, shape.cy, shape.r, rb);
 	} else {
-		return rasterizePolygon(shape.points, shape.borderWidth, shape.innerPoints);
+		return rasterizePolygon(shape.points, rb, shape.innerPoints);
 	}
 }
 

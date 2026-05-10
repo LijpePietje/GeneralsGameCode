@@ -10,6 +10,7 @@
 
 // ShapeFillMouse.cpp
 // Mouse event handling, hit testing, and drag logic for ShapeFillTool.
+// TheSuperHackers @feature Nemellud 09/05/2026 ShapeFillTool mouse input: hit testing, drag, polygon/line drawing
 
 #include "StdAfx.h"
 #include "ShapeFillTool.h"
