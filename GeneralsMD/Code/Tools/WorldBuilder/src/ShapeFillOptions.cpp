@@ -42,7 +42,6 @@ BOOL ShapeFillOptions::OnInitDialog()
 
 	m_updating = true;
 	m_innerHeightPopup.SetupPopSliderButton(this, IDC_SF_INNER_HEIGHT_POPUP, this);
-	m_outerHeightPopup.SetupPopSliderButton(this, IDC_SF_OUTER_HEIGHT_POPUP, this);
 	m_borderWidthPopup.SetupPopSliderButton(this, IDC_SF_BORDER_WIDTH_POPUP, this);
 	m_shapeList.SubclassDlgItem(IDC_SF_SHAPE_LIST, this);
 	m_staticThis = this;
@@ -77,10 +76,6 @@ void ShapeFillOptions::updateFromTool()
 	CWnd* pEdit = m_staticThis->GetDlgItem(IDC_SF_INNER_HEIGHT_EDIT);
 	if (pEdit) pEdit->SetWindowText(buf);
 
-	buf.Format("%d", ShapeFillTool::getOuterHeight());
-	pEdit = m_staticThis->GetDlgItem(IDC_SF_OUTER_HEIGHT_EDIT);
-	if (pEdit) pEdit->SetWindowText(buf);
-
 	buf.Format("%d", ShapeFillTool::getBorderWidth());
 	pEdit = m_staticThis->GetDlgItem(IDC_SF_BORDER_WIDTH_EDIT);
 	if (pEdit) pEdit->SetWindowText(buf);
@@ -94,12 +89,6 @@ void ShapeFillOptions::updateFromTool()
 	if (pNone) pNone->SetCheck(!autoBlend               ? BST_CHECKED : BST_UNCHECKED);
 	if (pOut)  pOut ->SetCheck(autoBlend && !blendInward ? BST_CHECKED : BST_UNCHECKED);
 	if (pIn)   pIn  ->SetCheck(autoBlend &&  blendInward ? BST_CHECKED : BST_UNCHECKED);
-	// Border blend active → outer height driven by terrain, disable manual edit
-	CWnd* pOuterEdit  = m_staticThis->GetDlgItem(IDC_SF_OUTER_HEIGHT_EDIT);
-	CWnd* pOuterPopup = m_staticThis->GetDlgItem(IDC_SF_OUTER_HEIGHT_POPUP);
-	if (pOuterEdit)  pOuterEdit->EnableWindow(!autoBlend);
-	if (pOuterPopup) pOuterPopup->EnableWindow(!autoBlend);
-
 	// Fill Blend radio buttons
 	Bool fillAuto    = ShapeFillTool::getFillAutoBlend();
 	Bool fillInward  = ShapeFillTool::getFillBlendInward();
@@ -289,19 +278,6 @@ void ShapeFillOptions::OnChangeInnerHeight()
 	}
 }
 
-void ShapeFillOptions::OnChangeOuterHeight()
-{
-	if (m_updating) return;
-	CWnd* pEdit = GetDlgItem(IDC_SF_OUTER_HEIGHT_EDIT);
-	if (!pEdit) return;
-	char buf[32]; pEdit->GetWindowText(buf, sizeof(buf));
-	Int val;
-	if (1 == sscanf(buf, "%d", &val)) {
-		ShapeFillTool::setOuterHeight(std::max(0, std::min(80, val)));
-		syncAndRedraw();
-	}
-}
-
 void ShapeFillOptions::OnChangeBorderWidth()
 {
 	if (m_updating) return;
@@ -319,10 +295,6 @@ void ShapeFillOptions::OnBlendNone()
 {
 	ShapeFillTool::setAutoBlend(false);
 	ShapeFillTool::setBlendInward(false);
-	CWnd* pOuterEdit  = GetDlgItem(IDC_SF_OUTER_HEIGHT_EDIT);
-	CWnd* pOuterPopup = GetDlgItem(IDC_SF_OUTER_HEIGHT_POPUP);
-	if (pOuterEdit)  pOuterEdit->EnableWindow(true);
-	if (pOuterPopup) pOuterPopup->EnableWindow(true);
 	syncAndRedraw();
 }
 
@@ -330,10 +302,6 @@ void ShapeFillOptions::OnBlendOut()
 {
 	ShapeFillTool::setAutoBlend(true);
 	ShapeFillTool::setBlendInward(false);
-	CWnd* pOuterEdit  = GetDlgItem(IDC_SF_OUTER_HEIGHT_EDIT);
-	CWnd* pOuterPopup = GetDlgItem(IDC_SF_OUTER_HEIGHT_POPUP);
-	if (pOuterEdit)  pOuterEdit->EnableWindow(false);
-	if (pOuterPopup) pOuterPopup->EnableWindow(false);
 	syncAndRedraw();
 }
 
@@ -341,10 +309,6 @@ void ShapeFillOptions::OnBlendIn()
 {
 	ShapeFillTool::setAutoBlend(true);
 	ShapeFillTool::setBlendInward(true);
-	CWnd* pOuterEdit  = GetDlgItem(IDC_SF_OUTER_HEIGHT_EDIT);
-	CWnd* pOuterPopup = GetDlgItem(IDC_SF_OUTER_HEIGHT_POPUP);
-	if (pOuterEdit)  pOuterEdit->EnableWindow(false);
-	if (pOuterPopup) pOuterPopup->EnableWindow(false);
 	syncAndRedraw();
 }
 
@@ -427,8 +391,6 @@ void ShapeFillOptions::GetPopSliderInfo(const long sliderID, long* pMin, long* p
 	switch (sliderID) {
 		case IDC_SF_INNER_HEIGHT_POPUP:
 			*pMin = 0; *pMax = 80; *pInitial = ShapeFillTool::getInnerHeight(); *pLineSize = 1; break;
-		case IDC_SF_OUTER_HEIGHT_POPUP:
-			*pMin = 0; *pMax = 80; *pInitial = ShapeFillTool::getOuterHeight(); *pLineSize = 1; break;
 		case IDC_SF_BORDER_WIDTH_POPUP:
 			*pMin = 0; *pMax = 30; *pInitial = ShapeFillTool::getBorderWidth(); *pLineSize = 1; break;
 		default:
@@ -445,12 +407,6 @@ void ShapeFillOptions::PopSliderChanged(const long sliderID, long theVal)
 			ShapeFillTool::setInnerHeight((Int)theVal);
 			str.Format("%d", theVal);
 			pEdit = GetDlgItem(IDC_SF_INNER_HEIGHT_EDIT);
-			if (pEdit) pEdit->SetWindowText(str);
-			break;
-		case IDC_SF_OUTER_HEIGHT_POPUP:
-			ShapeFillTool::setOuterHeight((Int)theVal);
-			str.Format("%d", theVal);
-			pEdit = GetDlgItem(IDC_SF_OUTER_HEIGHT_EDIT);
 			if (pEdit) pEdit->SetWindowText(str);
 			break;
 		case IDC_SF_BORDER_WIDTH_POPUP:
@@ -552,8 +508,6 @@ void ShapeFillOptions::refreshModeUI()
 	// Heights + border width: shapes only
 	show(IDC_SF_INNER_HEIGHT_EDIT,  isShape);
 	show(IDC_SF_INNER_HEIGHT_POPUP, isShape);
-	show(IDC_SF_OUTER_HEIGHT_EDIT,  isShape);
-	show(IDC_SF_OUTER_HEIGHT_POPUP, isShape);
 	show(IDC_SF_BORDER_WIDTH_EDIT,  isShape);
 	show(IDC_SF_BORDER_WIDTH_POPUP, isShape);
 	// Border width is overruled by free inner polygon in Edit mode — gray it out
@@ -610,7 +564,6 @@ BEGIN_MESSAGE_MAP(ShapeFillOptions, COptionsPanel)
 	ON_BN_CLICKED(IDC_SF_INNER_TEX_BTN, OnSelectInnerTex)
 	ON_BN_CLICKED(IDC_SF_BORDER_TEX_BTN, OnSelectBorderTex)
 	ON_EN_CHANGE(IDC_SF_INNER_HEIGHT_EDIT, OnChangeInnerHeight)
-	ON_EN_CHANGE(IDC_SF_OUTER_HEIGHT_EDIT, OnChangeOuterHeight)
 	ON_EN_CHANGE(IDC_SF_BORDER_WIDTH_EDIT, OnChangeBorderWidth)
 	ON_BN_CLICKED(IDC_SF_AUTO_BLEND,      OnBlendNone)
 	ON_BN_CLICKED(IDC_SF_BLEND_OUT,       OnBlendOut)

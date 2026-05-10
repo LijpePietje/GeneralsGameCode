@@ -37,7 +37,6 @@ protected:
 	afx_msg void OnClickFlipV();
 	afx_msg void OnClickFinishPoly();
 	afx_msg void OnChangeInnerHeight();
-	afx_msg void OnChangeOuterHeight();
 	afx_msg void OnChangeBorderWidth();
 	afx_msg void OnBlendNone();
 	afx_msg void OnBlendOut();
@@ -78,7 +77,6 @@ private:
 	Bool m_updating;
 	CListBox m_shapeList;
 	WBPopupSliderButton m_innerHeightPopup;
-	WBPopupSliderButton m_outerHeightPopup;
 	WBPopupSliderButton m_borderWidthPopup;
 
 	void refreshModeButtons();

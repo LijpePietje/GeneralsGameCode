@@ -43,8 +43,7 @@ struct ShapeDef {
 
 	// Terrain properties
 	Int  innerHeight;     // 0-80
-	Int  outerHeight;     // 0-80
-	Bool autoBlendOuter;  // blend outer height from existing terrain
+	Bool autoBlendOuter;  // outer texture blend active (Out or In)
 
 	// Texture
 	Int  innerTexClass;   // -1 = no texture
@@ -57,7 +56,7 @@ struct ShapeDef {
 		id(0), type(SHAPE_RECT), borderWidth(5),
 		x0(0), y0(0), x1(0), y1(0),
 		cx(0), cy(0), r(10),
-		innerHeight(10), outerHeight(0), autoBlendOuter(true),
+		innerHeight(10), autoBlendOuter(true),
 		innerTexClass(-1), borderTexClass(-1)
 	{}
 };
@@ -158,7 +157,6 @@ public:
 
 	// Properties (set from options dialog)
 	static void setInnerHeight(Int h)    { m_innerHeight = h; }
-	static void setOuterHeight(Int h)    { m_outerHeight = h; }
 	static void setAutoBlend(Bool b)     { m_autoBlend = b; }
 	static void setBlendInward(Bool b)   { m_blendInward = b; }
 	static void setBorderWidth(Int w)    {
@@ -176,7 +174,6 @@ public:
 	static void setBorderTexClass(Int t) { m_borderTexClass = t; }
 
 	static Int  getInnerHeight()    { return m_innerHeight; }
-	static Int  getOuterHeight()    { return m_outerHeight; }
 	static Bool getAutoBlend()      { return m_autoBlend; }
 	static Bool getBlendInward()    { return m_blendInward; }
 	static Int  getBorderWidth()    { return m_borderWidth; }
@@ -238,7 +235,6 @@ private:
 	// Tool properties
 	static SFToolMode m_mode;
 	static Int        m_innerHeight;
-	static Int        m_outerHeight;
 	static Bool       m_autoBlend;
 	static Bool       m_blendInward;
 	static Bool       m_fillAutoBlend;

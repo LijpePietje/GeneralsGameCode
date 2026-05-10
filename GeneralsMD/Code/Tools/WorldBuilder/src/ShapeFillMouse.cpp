@@ -83,7 +83,6 @@ void ShapeFillTool::updateDragShape(Int tx, Int ty)
 	m_draftShape = ShapeDef();
 	m_draftShape.borderWidth    = m_borderWidth;
 	m_draftShape.innerHeight    = m_innerHeight;
-	m_draftShape.outerHeight    = m_outerHeight;
 	m_draftShape.autoBlendOuter = m_autoBlend;
 	m_draftShape.innerTexClass  = m_innerTexClass;
 	m_draftShape.borderTexClass = m_borderTexClass;
@@ -512,7 +511,6 @@ void ShapeFillTool::mouseUp(TTrackingMode m, CPoint viewPt, WbView* pView, CWorl
 		shape.type           = (m_mode == SF_DRAW_RECT) ? SHAPE_RECT : SHAPE_CIRCLE;
 		shape.borderWidth    = m_borderWidth;
 		shape.innerHeight    = m_innerHeight;
-		shape.outerHeight    = m_outerHeight;
 		shape.autoBlendOuter = m_autoBlend;
 		shape.innerTexClass  = m_innerTexClass;
 		shape.borderTexClass = m_borderTexClass;

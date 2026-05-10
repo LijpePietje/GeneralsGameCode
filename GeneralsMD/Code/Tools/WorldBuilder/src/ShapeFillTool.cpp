@@ -44,7 +44,6 @@ Bool                  ShapeFillTool::m_isActive     = false;
 
 SFToolMode ShapeFillTool::m_mode            = SF_DRAW_RECT;
 Int        ShapeFillTool::m_innerHeight     = 10;
-Int        ShapeFillTool::m_outerHeight     = 0;
 Bool       ShapeFillTool::m_autoBlend       = true;   // shapes: Out by default
 Bool       ShapeFillTool::m_blendInward     = false;
 Bool       ShapeFillTool::m_fillAutoBlend   = true;   // fill: In by default
@@ -220,7 +219,6 @@ void ShapeFillTool::finishPolygon()
 	shape.points         = m_polyDraft;
 	shape.borderWidth    = m_borderWidth;
 	shape.innerHeight    = m_innerHeight;
-	shape.outerHeight    = m_outerHeight;
 	shape.autoBlendOuter = m_autoBlend;
 	shape.innerTexClass  = m_innerTexClass;
 	shape.borderTexClass = m_borderTexClass;
@@ -249,7 +247,6 @@ void ShapeFillTool::applySelectedShape(CWorldBuilderDoc* pDoc)
 	if (!shape) return;
 
 	shape->innerHeight    = m_innerHeight;
-	shape->outerHeight    = m_outerHeight;
 	shape->autoBlendOuter = m_autoBlend;
 	shape->borderWidth    = m_borderWidth;
 	shape->innerTexClass  = m_innerTexClass;
@@ -338,12 +335,8 @@ void ShapeFillTool::applySelectedShape(CWorldBuilderDoc* pDoc)
 		if (hx < 0 || hy < 0 || hx >= mapW || hy >= mapH) continue;
 		float t = hasInnerPoly ? bt.dist : std::max(0.0f, std::min(1.0f, bt.dist / bwf));
 		Int existingH = htMapCopy->getHeight(hx, hy);
-		Int outerH = shape->autoBlendOuter ? sampleOuterTerrain(bt.pt.x, bt.pt.y) : shape->outerHeight;
-		Int h;
-		if (shape->autoBlendOuter)
-			h = (Int)(outerH + t * (shape->innerHeight - outerH));
-		else
-			h = (Int)(shape->outerHeight + t * (shape->innerHeight - shape->outerHeight));
+		Int outerH = sampleOuterTerrain(bt.pt.x, bt.pt.y);
+		Int h = (Int)(outerH + t * (shape->innerHeight - outerH));
 		h = std::max(0, std::min(80, h));
 		if (existingH != h)
 			htMapCopy->setHeight(hx, hy, (UnsignedByte)h);
@@ -459,7 +452,6 @@ void ShapeFillTool::syncSelectedFromPanel()
 		if (s.id == m_selectedId) {
 			s.borderWidth    = m_borderWidth;
 			s.innerHeight    = m_innerHeight;
-			s.outerHeight    = m_outerHeight;
 			s.autoBlendOuter = m_autoBlend;
 			s.innerTexClass  = m_innerTexClass;
 			s.borderTexClass = m_borderTexClass;
@@ -591,10 +583,10 @@ void ShapeFillTool::saveShapes(const CString& mapPath)
 	fprintf(f, "NEXTID %d %d\n", m_nextId, m_nextLineId);
 
 	for (const auto& s : m_shapes) {
-		fprintf(f, "SHAPE %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d\n",
+		fprintf(f, "SHAPE %d %d %d %d %d %d %d %d %d %d %d %d %d %d\n",
 			s.id, (int)s.type, s.x0, s.y0, s.x1, s.y1,
 			s.cx, s.cy, s.r, s.borderWidth,
-			s.innerHeight, s.outerHeight, s.autoBlendOuter ? 1 : 0,
+			s.innerHeight, s.autoBlendOuter ? 1 : 0,
 			s.innerTexClass, s.borderTexClass);
 		for (const auto& pt : s.points)
 			fprintf(f, "POLY_PT %d %d %d\n", s.id, pt.tx, pt.ty);
@@ -630,10 +622,10 @@ void ShapeFillTool::loadShapes(const CString& mapPath)
 		} else if (strncmp(line, "SHAPE ", 6) == 0) {
 			ShapeDef s;
 			int type, autoBlend;
-			sscanf(line, "SHAPE %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d",
+			sscanf(line, "SHAPE %d %d %d %d %d %d %d %d %d %d %d %d %d %d",
 				&s.id, &type, &s.x0, &s.y0, &s.x1, &s.y1,
 				&s.cx, &s.cy, &s.r, &s.borderWidth,
-				&s.innerHeight, &s.outerHeight, &autoBlend,
+				&s.innerHeight, &autoBlend,
 				&s.innerTexClass, &s.borderTexClass);
 			s.type           = (ShapeType)type;
 			s.autoBlendOuter = (autoBlend != 0);
