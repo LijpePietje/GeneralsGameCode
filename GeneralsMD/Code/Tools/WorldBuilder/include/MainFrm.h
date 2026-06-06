@@ -148,6 +148,79 @@ protected:
 	afx_msg void OnTimer(UINT nIDEvent);
 	afx_msg void OnEditCameraoptions();
 	//}}AFX_MSG
+	// TheSuperHackers @feature Nemellud 23/05/2026 DarkTheme: dark main frame background
+	afx_msg BOOL OnEraseBkgnd(CDC* pDC);
+	// TheSuperHackers @feature Nemellud 24/05/2026 EmbeddedMode: ShapeFill mode via pipe
+	afx_msg LRESULT OnWbSfMode(WPARAM wParam, LPARAM lParam);
+	// TheSuperHackers @feature Nemellud 25/05/2026 EmbeddedMode: set view projection via pipe
+	afx_msg LRESULT OnWbSetProjection(WPARAM wParam, LPARAM lParam);
+	// TheSuperHackers @feature Nemellud 25/05/2026 EmbeddedMode: ShapeFill full panel control via pipe
+	afx_msg LRESULT OnWbSfGetState(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbSfSetInt(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbSfAction(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbSfOpenTex(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbSfSelect(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbSfGetTexList(WPARAM wParam, LPARAM lParam);
+	// TheSuperHackers @feature Nemellud 25/05/2026 EmbeddedMode: Tier B — brush/mound/texture tool control via pipe
+	afx_msg LRESULT OnWbBrushSet(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbBrushGetState(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbMoundSet(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbMoundGetState(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbTexSet(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbTexGetState(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbTexAction(WPARAM wParam, LPARAM lParam);
+	// TheSuperHackers @feature Nemellud 25/05/2026 EmbeddedMode: Tier C — feather/scorch/meshmold/water/ramp via pipe
+	afx_msg LRESULT OnWbFeatherSet(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbFeatherGet(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbScorchSet(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbScorchGet(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbMeshmoldSet(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbMeshmoldGet(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbMeshmoldAction(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbWaterSet(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbWaterGet(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbRampSet(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbRampGet(WPARAM wParam, LPARAM lParam);
+	// TheSuperHackers @feature Nemellud 25/05/2026 EmbeddedMode: Tier D — contour via pipe
+	afx_msg LRESULT OnWbContourSet(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbContourGet(WPARAM wParam, LPARAM lParam);
+	// TheSuperHackers @feature Nemellud 25/05/2026 EmbeddedMode: Tier H — map data read-back via pipe
+	afx_msg LRESULT OnWbGetMapInfo(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbGetHeightmap(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbGetTexturemap(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbGetObjects(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbGetWaypoints(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbGetTriggers(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbGetTeams(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbGetSelected(WPARAM wParam, LPARAM lParam);
+	// TheSuperHackers @feature Nemellud 25/05/2026 EmbeddedMode: Tier I terrain write handlers
+	afx_msg LRESULT OnWbSfCreatePipe(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbMapHeightSet(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbPlaceWaypoint(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbLinkWaypoints(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbPlaceObject(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbPlantTree(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbPlantGrove(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbGetViewState(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbRotateSelected(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbObjGetProps(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbObjSetProp(WPARAM wParam, LPARAM lParam);
+	// Tier J — SidesList wizard
+	afx_msg LRESULT OnWbGetSideList(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbSetPlayer(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbSetTeam(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbDelTeam(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbSetScript(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbDelScript(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbSetGroup(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbAddSkirmish(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbAddPlayer(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbDelPlayer(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbDelWaypoint(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbAddTrigger(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbDelTrigger(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbSetTrigger(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbSelectObject(WPARAM wParam, LPARAM lParam);
 	DECLARE_MESSAGE_MAP()
 };
 
