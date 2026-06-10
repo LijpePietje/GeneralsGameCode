@@ -221,6 +221,20 @@ protected:
 	afx_msg LRESULT OnWbDelTrigger(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbSetTrigger(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbSelectObject(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbPipeCmd(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbNewMap(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbResizeMap(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbPlaceRoad(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbListRoads(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbDelRoad(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbSelRoad(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbPlaceBridge(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbListBridges(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbSetBridgeName(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbSetRoadTool(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbSaveToPath(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbGetLighting(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbSetLighting(WPARAM wParam, LPARAM lParam);
 	DECLARE_MESSAGE_MAP()
 };
 

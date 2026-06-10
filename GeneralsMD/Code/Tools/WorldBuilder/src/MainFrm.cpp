@@ -28,6 +28,10 @@
 
 #include "Common/GlobalData.h"
 
+// TheSuperHackers @feature Nemellud 10/06/2026 EmbeddedMode: global lighting via pipe
+#include "Lib/BaseType.h"
+#include "GlobalLightOptions.h"
+
 #include "DrawObject.h"
 #include "LayersList.h"
 #include "WHeightMapEdit.h"
@@ -161,6 +165,8 @@ BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
 	ON_MESSAGE(WM_WB_SET_ROAD_TOOL,    OnWbSetRoadTool)
 	ON_MESSAGE(WM_WB_SET_BRIDGE_NAME,  OnWbSetBridgeName)
 	ON_MESSAGE(WM_WB_SAVE_TO_PATH,     OnWbSaveToPath)
+	ON_MESSAGE(WM_WB_GET_LIGHTING,     OnWbGetLighting)
+	ON_MESSAGE(WM_WB_SET_LIGHTING,     OnWbSetLighting)
 END_MESSAGE_MAP()
 
 static UINT indicators[] =
@@ -3423,5 +3429,109 @@ LRESULT CMainFrame::OnWbSaveToPath(WPARAM, LPARAM)
 	BOOL ok = pDoc->SaveToPath(g_wbSavePath);
 	g_wbSavePath[0] = '\0';
 	return ok ? 1 : 0;
+}
+
+// TheSuperHackers @feature Nemellud 10/06/2026 EmbeddedMode: read global lighting state via pipe.
+// Returns timeOfDay plus per-target (terrain/objects) arrays of 3 lights (sun, accent1, accent2)
+// with ambient/diffuse as 0-255 ints and the raw light direction vector.
+LRESULT CMainFrame::OnWbGetLighting(WPARAM wParam, LPARAM lParam)
+{
+	char* buf = (char*)lParam;
+	int maxLen = (int)wParam;
+	if (!buf || maxLen < 256) return 0;
+
+	int tod = (int)TheGlobalData->m_timeOfDay;
+	if (tod < TIME_OF_DAY_FIRST || tod >= TIME_OF_DAY_COUNT) tod = TIME_OF_DAY_FIRST;
+
+	int pos = 0;
+	pos += _snprintf(buf + pos, maxLen - pos, "{\"ok\":true,\"timeOfDay\":%d", tod);
+	const char* targetNames[2] = { "terrain", "objects" };
+	for (int s = 0; s < 2 && pos < maxLen - 256; s++) {
+		pos += _snprintf(buf + pos, maxLen - pos, ",\"%s\":[", targetNames[s]);
+		for (int li = 0; li < 3 && pos < maxLen - 200; li++) {
+			const GlobalData::TerrainLighting* tl = (s == 0)
+				? &TheGlobalData->m_terrainLighting[tod][li]
+				: &TheGlobalData->m_terrainObjectsLighting[tod][li];
+			pos += _snprintf(buf + pos, maxLen - pos,
+				"%s{\"ambient\":[%d,%d,%d],\"diffuse\":[%d,%d,%d],\"pos\":[%.4f,%.4f,%.4f]}",
+				li ? "," : "",
+				(int)(tl->ambient.red * 255.0f + 0.5f), (int)(tl->ambient.green * 255.0f + 0.5f), (int)(tl->ambient.blue * 255.0f + 0.5f),
+				(int)(tl->diffuse.red * 255.0f + 0.5f), (int)(tl->diffuse.green * 255.0f + 0.5f), (int)(tl->diffuse.blue * 255.0f + 0.5f),
+				tl->lightPos.x, tl->lightPos.y, tl->lightPos.z);
+		}
+		if (pos < maxLen - 1) buf[pos++] = ']';
+	}
+	if (pos < maxLen - 2) { buf[pos++] = '}'; buf[pos] = '\0'; }
+	return 0;
+}
+
+// TheSuperHackers @feature Nemellud 10/06/2026 EmbeddedMode: set global lighting via pipe.
+// Json fields (all optional): timeOfDay 1-4 (switches and re-renders), target "terrain"/"objects"/"both"
+// (default both), light 0-2, ambR/ambG/ambB and difR/difG/difB as 0-255 ints, azimuth 0-360 and
+// elevation -90..90 in degrees (same direction math as GlobalLightOptions::showLightFeedback).
+LRESULT CMainFrame::OnWbSetLighting(WPARAM wParam, LPARAM lParam)
+{
+	char* buf = (char*)lParam;
+	int maxLen = (int)wParam;
+	if (!buf || maxLen < 64) return 0;
+	char json[2048];
+	strncpy(json, buf, sizeof(json) - 1); json[sizeof(json) - 1] = '\0';
+
+	WbView3d* pView = CWorldBuilderDoc::GetActive3DView();
+	if (!pView) { _snprintf(buf, maxLen, "{\"ok\":false,\"error\":\"no 3d view\"}"); return 0; }
+
+	int tod;
+	if (MF_JsonGetInt(json, "timeOfDay", &tod)) {
+		if (tod < TIME_OF_DAY_FIRST) tod = TIME_OF_DAY_FIRST;
+		if (tod >= TIME_OF_DAY_COUNT) tod = TIME_OF_DAY_COUNT - 1;
+		TheWritableGlobalData->m_timeOfDay = (TimeOfDay)tod;
+		pView->resetRenderObjects();
+		pView->invalObjectInView(nullptr);
+	}
+
+	int curTod = (int)TheGlobalData->m_timeOfDay;
+	if (curTod < TIME_OF_DAY_FIRST || curTod >= TIME_OF_DAY_COUNT) curTod = TIME_OF_DAY_FIRST;
+
+	int light = 0;
+	MF_JsonGetInt(json, "light", &light);
+	if (light < 0) light = 0;
+	if (light > 2) light = 2;
+
+	char targetStr[16] = "";
+	int target = GlobalLightOptions::K_BOTH;
+	if (MF_JsonGetStr(json, "target", targetStr, sizeof(targetStr))) {
+		if (strcmp(targetStr, "terrain") == 0) target = GlobalLightOptions::K_TERRAIN;
+		else if (strcmp(targetStr, "objects") == 0) target = GlobalLightOptions::K_OBJECTS;
+	}
+
+	// Start from the current values of the (first) targeted array so partial updates work
+	GlobalData::TerrainLighting tl = (target == GlobalLightOptions::K_OBJECTS)
+		? TheGlobalData->m_terrainObjectsLighting[curTod][light]
+		: TheGlobalData->m_terrainLighting[curTod][light];
+
+	int v;
+	bool changed = false;
+	if (MF_JsonGetInt(json, "ambR", &v)) { tl.ambient.red   = v / 255.0f; changed = true; }
+	if (MF_JsonGetInt(json, "ambG", &v)) { tl.ambient.green = v / 255.0f; changed = true; }
+	if (MF_JsonGetInt(json, "ambB", &v)) { tl.ambient.blue  = v / 255.0f; changed = true; }
+	if (MF_JsonGetInt(json, "difR", &v)) { tl.diffuse.red   = v / 255.0f; changed = true; }
+	if (MF_JsonGetInt(json, "difG", &v)) { tl.diffuse.green = v / 255.0f; changed = true; }
+	if (MF_JsonGetInt(json, "difB", &v)) { tl.diffuse.blue  = v / 255.0f; changed = true; }
+
+	int az, el;
+	if (MF_JsonGetInt(json, "azimuth", &az) && MF_JsonGetInt(json, "elevation", &el)) {
+		double azr = az * PI / 180.0;
+		double elr = el * PI / 180.0;
+		tl.lightPos.x = (Real)(sin(PI / 2.0 + elr) * cos(azr));
+		tl.lightPos.y = (Real)(sin(PI / 2.0 + elr) * sin(azr));
+		tl.lightPos.z = (Real)(cos(PI / 2.0 + elr));
+		changed = true;
+	}
+
+	if (changed)
+		pView->setLighting(&tl, target, light);
+
+	_snprintf(buf, maxLen, "{\"ok\":true}");
+	return 0;
 }
 

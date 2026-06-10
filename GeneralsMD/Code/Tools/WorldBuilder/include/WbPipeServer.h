@@ -144,6 +144,36 @@ private:
 #define WM_WB_DEL_TRIGGER   (WM_USER + 186)  // async: delete trigger by name; lParam=heap json ptr
 #define WM_WB_SET_TRIGGER   (WM_USER + 187)  // async: rename/update trigger props; lParam=heap json ptr
 #define WM_WB_SELECT_OBJECT (WM_USER + 188)  // async: deselect all, select named waypoint/object; lParam=heap json ptr
+// TheSuperHackers @feature Nemellud 06/06/2026 EmbeddedMode: new map / resize map via pipe (no native dialog)
+#define WM_WB_NEW_MAP       (WM_USER + 189)  // async: create new map from g_wbNewMapReq; no lParam
+#define WM_WB_RESIZE_MAP    (WM_USER + 190)  // async: resize map from g_wbResizeMapReq; no lParam
+// TheSuperHackers @feature Nemellud 07/06/2026 EmbeddedMode: roads and bridges via pipe
+#define WM_WB_PLACE_ROAD    (WM_USER + 191)  // async: place road segment; lParam=heap json ptr
+#define WM_WB_LIST_ROADS    (WM_USER + 192)  // sync:  list all road segments; wParam=bufLen, lParam=buf
+#define WM_WB_DEL_ROAD      (WM_USER + 193)  // sync:  delete road nearest to coords; lParam=heap json ptr
+#define WM_WB_PLACE_BRIDGE  (WM_USER + 194)  // async: place bridge segment; lParam=heap json ptr
+#define WM_WB_LIST_BRIDGES  (WM_USER + 195)  // sync:  list all bridge segments; wParam=bufLen, lParam=buf
+#define WM_WB_SET_ROAD_TOOL (WM_USER + 196)  // async: set RoadOptions type/corner; lParam=heap json ptr
+#define WM_WB_SEL_ROAD      (WM_USER + 197)  // async: select road/bridge nearest to coords in WB; lParam=heap json ptr
+#define WM_WB_SET_BRIDGE_NAME (WM_USER + 198)  // async: set wbScriptName dict property on bridge; lParam=heap json ptr
+#define WM_WB_SAVE_TO_PATH    (WM_USER + 199)  // sync: save map to explicit path (no dialog); reads g_wbSavePath
+// TheSuperHackers @feature Nemellud 10/06/2026 EmbeddedMode: global lighting via pipe
+#define WM_WB_GET_LIGHTING    (WM_USER + 200)  // sync: read global lighting state; wParam=bufLen, lParam=buf
+#define WM_WB_SET_LIGHTING    (WM_USER + 201)  // sync: set light colors/angles/timeOfDay; json in buf, result written back
+
+extern char g_wbSavePath[260];
+
+struct WbNewMapReq {
+	int x, y, border, height;
+	bool valid;
+};
+struct WbResizeMapReq {
+	int x, y, border, height;
+	bool anchorTop, anchorBottom, anchorLeft, anchorRight;
+	bool valid;
+};
+extern WbNewMapReq    g_wbNewMapReq;
+extern WbResizeMapReq g_wbResizeMapReq;
 
 extern float g_wbRotateAngleDeg;  // degrees — written by pipe thread before SendMessage
 

@@ -30,6 +30,14 @@ WbLinkReq       g_wbLinkReq         = {0};
 float           g_wbRotateAngleDeg  = 0.0f;
 WbPlantTreeReq  g_wbPlantTreeReq    = {0};
 WbPlantGroveReq g_wbPlantGroveReq   = {0};
+// TheSuperHackers @feature Nemellud 06/06/2026 EmbeddedMode: new map / resize map structs
+WbNewMapReq    g_wbNewMapReq    = {0,0,0,0,false};
+// TheSuperHackers @feature Nemellud 10/06/2026 EmbeddedMode: save-to-path path buffer
+char           g_wbSavePath[260] = "";
+WbResizeMapReq g_wbResizeMapReq = {0,0,0,0,false,false,false,false,false};
+// TheSuperHackers @feature Nemellud 07/06/2026 EmbeddedMode: del_road sync struct
+struct WbDelRoadReq { float x1, y1; bool bridge; };
+WbDelRoadReq   g_wbDelRoadReq   = {0,0,false};
 extern int   g_wbScreenQuerySx;
 extern int   g_wbScreenQuerySy;
 
@@ -67,6 +75,10 @@ void WbPipeServer::Start(HWND mainHwnd)
 {
 	if (s_thread != NULL)
 		return;
+
+	// TheSuperHackers @fix Nemellud 06/06/2026 EmbeddedMode: force ShowEntireMap=1 so the 3D view always renders the full map.
+	// Profile may have stored 0 from a previous partial-view session via the View menu.
+	::AfxGetApp()->WriteProfileInt("MainFrame", "ShowEntireMap", 1);
 
 	s_hwnd    = mainHwnd;
 	s_running = true;
@@ -134,7 +146,8 @@ static bool ReadLine(HANDLE pipe, char* buf, int maxLen)
 
 void WbPipeServer::HandleClient(HANDLE pipe, HWND hwnd)
 {
-	char line[4096];
+	// 64KB input matches pipe buffer; scripts with conditions can exceed 4096 bytes
+	static char line[65536];
 	// 1MB static buffer — single-threaded per connection, safe
 	static char response[1048576];
 
@@ -386,6 +399,20 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 		PostMessage(hwnd, WM_COMMAND, WB_ID_SAVE, 0);
 		_snprintf(responseBuf, responseBufLen, "{\"ok\":true}");
 		return true;
+	}
+	// TheSuperHackers @feature Nemellud 10/06/2026 EmbeddedMode: save to explicit path (no dialog)
+	if (strcmp(cmd, "save_to") == 0) {
+		char path[MAX_PATH] = "";
+		JsonGetStr(json, "path", path, sizeof(path));
+		if (path[0] == '\0') {
+			_snprintf(responseBuf, responseBufLen, "{\"ok\":false,\"error\":\"missing path\"}");
+			return false;
+		}
+		strncpy(g_wbSavePath, path, sizeof(g_wbSavePath) - 1);
+		g_wbSavePath[sizeof(g_wbSavePath) - 1] = '\0';
+		LRESULT ok = SendMessage(hwnd, WM_WB_SAVE_TO_PATH, 0, 0);
+		_snprintf(responseBuf, responseBufLen, "{\"ok\":%s}", ok ? "true" : "false");
+		return (ok != 0);
 	}
 
 	if (strcmp(cmd, "tool") == 0) {
@@ -819,6 +846,62 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 		return true;
 	}
 
+	// TheSuperHackers @feature Nemellud 07/06/2026 EmbeddedMode: road and bridge placement via pipe
+	if (strcmp(cmd, "place_road") == 0) {
+		char* heap = new char[strlen(json) + 1];
+		strcpy(heap, json);
+		PostMessage(hwnd, WM_WB_PLACE_ROAD, 0, (LPARAM)heap);
+		_snprintf(responseBuf, responseBufLen, "{\"ok\":true}");
+		return true;
+	}
+	if (strcmp(cmd, "map_get_roads") == 0) {
+		SendMessage(hwnd, WM_WB_LIST_ROADS, (WPARAM)responseBufLen, (LPARAM)responseBuf);
+		return true;
+	}
+	if (strcmp(cmd, "del_road") == 0) {
+		// Synchronous so a list query immediately after sees the updated state.
+		// Pre-fill global struct (pipe allows max 1 connection, SendMessage is sync).
+		float fx1 = 0, fy1 = 0; int bridge = 0;
+		JsonGetFloat(json, "x1", &fx1); JsonGetFloat(json, "y1", &fy1);
+		JsonGetInt(json, "bridge", &bridge);
+		g_wbDelRoadReq.x1 = fx1; g_wbDelRoadReq.y1 = fy1; g_wbDelRoadReq.bridge = !!bridge;
+		int ok = (int)SendMessage(hwnd, WM_WB_DEL_ROAD, (WPARAM)responseBufLen, (LPARAM)responseBuf);
+		if (!responseBuf[0]) _snprintf(responseBuf, responseBufLen, "{\"ok\":%s}", ok ? "true" : "false");
+		return true;
+	}
+	if (strcmp(cmd, "sel_road") == 0) {
+		char* heap = new char[strlen(json) + 1];
+		strcpy(heap, json);
+		PostMessage(hwnd, WM_WB_SEL_ROAD, 0, (LPARAM)heap);
+		_snprintf(responseBuf, responseBufLen, "{\"ok\":true}");
+		return true;
+	}
+	if (strcmp(cmd, "place_bridge") == 0) {
+		char* heap = new char[strlen(json) + 1];
+		strcpy(heap, json);
+		PostMessage(hwnd, WM_WB_PLACE_BRIDGE, 0, (LPARAM)heap);
+		_snprintf(responseBuf, responseBufLen, "{\"ok\":true}");
+		return true;
+	}
+	if (strcmp(cmd, "map_get_bridges") == 0) {
+		SendMessage(hwnd, WM_WB_LIST_BRIDGES, (WPARAM)responseBufLen, (LPARAM)responseBuf);
+		return true;
+	}
+	if (strcmp(cmd, "set_bridge_name") == 0) {
+		char* heap = new char[strlen(json) + 1];
+		strcpy(heap, json);
+		PostMessage(hwnd, WM_WB_SET_BRIDGE_NAME, 0, (LPARAM)heap);
+		_snprintf(responseBuf, responseBufLen, "{\"ok\":true}");
+		return true;
+	}
+	if (strcmp(cmd, "set_road_tool") == 0) {
+		char* heap = new char[strlen(json) + 1];
+		strcpy(heap, json);
+		PostMessage(hwnd, WM_WB_SET_ROAD_TOOL, 0, (LPARAM)heap);
+		_snprintf(responseBuf, responseBufLen, "{\"ok\":true}");
+		return true;
+	}
+
 	// TheSuperHackers @feature Nemellud 30/05/2026 EmbeddedMode: scatter vegetation over a circular area
 	if (strcmp(cmd, "plant_grove") == 0) {
 		float fval; int ival;
@@ -1033,6 +1116,18 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 		return true;
 	}
 
+	// TheSuperHackers @feature Nemellud 10/06/2026 EmbeddedMode: global lighting via pipe
+	if (strcmp(cmd, "lighting_get") == 0) {
+		SendMessage(hwnd, WM_WB_GET_LIGHTING, (WPARAM)responseBufLen, (LPARAM)responseBuf);
+		return true;
+	}
+
+	if (strcmp(cmd, "lighting_set") == 0) {
+		strncpy(responseBuf, json, responseBufLen - 1); responseBuf[responseBufLen - 1] = '\0';
+		SendMessage(hwnd, WM_WB_SET_LIGHTING, (WPARAM)responseBufLen, (LPARAM)responseBuf);
+		return true;
+	}
+
 	if (strcmp(cmd, "sidelist_script_del") == 0) {
 		strncpy(responseBuf, json, responseBufLen - 1); responseBuf[responseBufLen - 1] = '\0';
 		SendMessage(hwnd, WM_WB_DEL_SCRIPT, (WPARAM)responseBufLen, (LPARAM)responseBuf);
@@ -1072,6 +1167,47 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 		char *heap = new char[strlen(json) + 1];
 		strcpy(heap, json);
 		PostMessage(hwnd, WM_WB_SELECT_OBJECT, 0, (LPARAM)heap);
+		_snprintf(responseBuf, responseBufLen, "{\"ok\":true}");
+		return true;
+	}
+
+	// TheSuperHackers @feature Nemellud 06/06/2026 EmbeddedMode: create new map via pipe (no native dialog)
+	if (strcmp(cmd, "new_map") == 0) {
+		int ival;
+		g_wbNewMapReq = {0,0,0,0,false};
+		g_wbNewMapReq.x      = 200; // defaults
+		g_wbNewMapReq.y      = 200;
+		g_wbNewMapReq.border = 10;
+		g_wbNewMapReq.height = 20;
+		if (JsonGetInt(json, "x",      &ival)) g_wbNewMapReq.x      = ival;
+		if (JsonGetInt(json, "y",      &ival)) g_wbNewMapReq.y      = ival;
+		if (JsonGetInt(json, "border", &ival)) g_wbNewMapReq.border = ival;
+		if (JsonGetInt(json, "height", &ival)) g_wbNewMapReq.height = ival;
+		g_wbNewMapReq.valid = true;
+		PostMessage(hwnd, WM_WB_NEW_MAP, 0, 0);
+		_snprintf(responseBuf, responseBufLen, "{\"ok\":true}");
+		return true;
+	}
+
+	// TheSuperHackers @feature Nemellud 06/06/2026 EmbeddedMode: resize map via pipe (no native dialog)
+	if (strcmp(cmd, "resize_map") == 0) {
+		int ival;
+		char anchor[4] = "mc";
+		g_wbResizeMapReq = {0,0,0,0,false,false,false,false,false};
+		g_wbResizeMapReq.border = 10;
+		g_wbResizeMapReq.height = 20;
+		if (JsonGetInt(json, "x",      &ival))   g_wbResizeMapReq.x      = ival;
+		if (JsonGetInt(json, "y",      &ival))   g_wbResizeMapReq.y      = ival;
+		if (JsonGetInt(json, "border", &ival))   g_wbResizeMapReq.border = ival;
+		if (JsonGetInt(json, "height", &ival))   g_wbResizeMapReq.height = ival;
+		JsonGetStr(json, "anchor", anchor, sizeof(anchor));
+		// anchor: char[0]='t'|'m'|'b', char[1]='l'|'c'|'r'
+		g_wbResizeMapReq.anchorTop    = (anchor[0] == 't');
+		g_wbResizeMapReq.anchorBottom = (anchor[0] == 'b');
+		g_wbResizeMapReq.anchorLeft   = (anchor[1] == 'l');
+		g_wbResizeMapReq.anchorRight  = (anchor[1] == 'r');
+		g_wbResizeMapReq.valid = true;
+		PostMessage(hwnd, WM_WB_RESIZE_MAP, 0, 0);
 		_snprintf(responseBuf, responseBufLen, "{\"ok\":true}");
 		return true;
 	}
