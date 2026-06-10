@@ -39,6 +39,7 @@
 #include "ScriptDialog.h"
 // TheSuperHackers @feature Nemellud 24/05/2026 EmbeddedMode: ShapeFill mode dispatch
 #include "WbPipeServer.h"
+#include "NewHeightMap.h"
 #include "ShapeFillTool.h"
 // TheSuperHackers @feature Nemellud 25/05/2026 EmbeddedMode: full tool + map read-back handlers
 #include "BrushTool.h"
@@ -148,6 +149,18 @@ BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
 	ON_MESSAGE(WM_WB_DEL_TRIGGER,      OnWbDelTrigger)
 	ON_MESSAGE(WM_WB_SET_TRIGGER,      OnWbSetTrigger)
 	ON_MESSAGE(WM_WB_SELECT_OBJECT,    OnWbSelectObject)
+	ON_MESSAGE(WM_WB_PIPE_CMD,         OnWbPipeCmd)
+	ON_MESSAGE(WM_WB_NEW_MAP,          OnWbNewMap)
+	ON_MESSAGE(WM_WB_RESIZE_MAP,       OnWbResizeMap)
+	ON_MESSAGE(WM_WB_PLACE_ROAD,       OnWbPlaceRoad)
+	ON_MESSAGE(WM_WB_LIST_ROADS,       OnWbListRoads)
+	ON_MESSAGE(WM_WB_DEL_ROAD,         OnWbDelRoad)
+	ON_MESSAGE(WM_WB_SEL_ROAD,         OnWbSelRoad)
+	ON_MESSAGE(WM_WB_PLACE_BRIDGE,     OnWbPlaceBridge)
+	ON_MESSAGE(WM_WB_LIST_BRIDGES,     OnWbListBridges)
+	ON_MESSAGE(WM_WB_SET_ROAD_TOOL,    OnWbSetRoadTool)
+	ON_MESSAGE(WM_WB_SET_BRIDGE_NAME,  OnWbSetBridgeName)
+	ON_MESSAGE(WM_WB_SAVE_TO_PATH,     OnWbSaveToPath)
 END_MESSAGE_MAP()
 
 static UINT indicators[] =
@@ -1256,23 +1269,35 @@ LRESULT CMainFrame::OnWbGetObjects(WPARAM wParam, LPARAM lParam)
 		if (pObj->isWaypoint()) continue;
 		if (pos >= maxLen - 256) break;
 		const Coord3D* loc = pObj->getLocation();
-		const char* name = pObj->getName().str();
+		const Dict* d = pObj->getProperties();
+		Int flags = pObj->getFlags();
+		bool isBridgePt1 = !!(flags & FLAG_BRIDGE_POINT1);
+		bool isBridgePt2 = !!(flags & FLAG_BRIDGE_POINT2);
+		if (isBridgePt2) continue; // skip POINT2 — POINT1 already represents the bridge pair
+		char objName[128] = "";
+		if (isBridgePt1 && d) {
+			Bool sne = FALSE;
+			AsciiString sn = d->getAsciiString(TheKey_objectName, &sne);
+			if (sne && sn.getLength() > 0) strncpy(objName, sn.str(), sizeof(objName) - 1);
+		}
+		// Bridge: use objectName (the script-referenceable Name) if set, else template type name
+		const char* name = (isBridgePt1 && objName[0]) ? objName : pObj->getName().str();
 		// Get owner from dict
 		char owner[64] = "";
-		const Dict* d = pObj->getProperties();
 		if (d) {
 			Bool exists = FALSE;
 			AsciiString ownerStr = d->getAsciiString(TheKey_originalOwner, &exists);
 			if (exists) strncpy(owner, ownerStr.str(), sizeof(owner) - 1);
 		}
 		pos += _snprintf(buf + pos, maxLen - pos,
-			"%s{\"name\":\"%s\",\"wx\":%.1f,\"wy\":%.1f,\"angle\":%.1f,\"team\":\"%s\",\"selected\":%s}",
+			"%s{\"name\":\"%s\",\"wx\":%.1f,\"wy\":%.1f,\"angle\":%.1f,\"team\":\"%s\",\"selected\":%s,\"flags\":%d}",
 			first ? "" : ",",
 			name,
 			loc ? loc->x : 0.0f, loc ? loc->y : 0.0f,
 			pObj->getAngle() * (180.0f / 3.14159265f),
 			owner,
-			pObj->isSelected() ? "true" : "false");
+			pObj->isSelected() ? "true" : "false",
+			flags);
 		first = false;
 	}
 	if (pos < maxLen - 2) { buf[pos++] = ']'; buf[pos++] = '}'; buf[pos] = '\0'; }
@@ -1508,6 +1533,58 @@ LRESULT CMainFrame::OnWbObjGetProps(WPARAM wParam, LPARAM lParam)
 #define DSTR(key)  (d ? d->getAsciiString(key, &exists).str() : "")
 #define DINT(key)  (d ? d->getInt(key, &exists) : 0)
 #define DBOOL(key) (d && d->getBool(key, &exists) ? "true" : "false")
+
+	// TheSuperHackers @feature Nemellud 08/06/2026 EmbeddedMode: bridge POINT1/POINT2 exposed via obj_get_props
+	auto writeBridgeProps = [&](const char* tplName, float px1, float py1, float px2, float py2, const Dict* pd) {
+		const Dict* sd = pd;
+		Bool ex2 = FALSE;
+#define SD(key)  (sd ? sd->getAsciiString(key, &ex2).str() : "")
+#define SI(key)  (sd ? sd->getInt(key, &ex2) : 0)
+#define SB(key)  (sd && sd->getBool(key, &ex2) ? "true" : "false")
+		_snprintf(buf, maxLen,
+			"{\"ok\":true,\"type\":\"bridge\","
+			"\"templateName\":\"%s\","
+			"\"x1\":%.1f,\"y1\":%.1f,\"x2\":%.1f,\"y2\":%.1f,"
+			"\"team\":\"%s\",\"name\":\"%s\",\"script\":\"%s\","
+			"\"health\":%d,\"maxHP\":%d,"
+			"\"weather\":%d,\"time\":%d,"
+			"\"enabled\":%s,\"indestructible\":%s,"
+			"\"unsellable\":%s,\"targetable\":%s,"
+			"\"powered\":%s,\"selectable\":%s}",
+			tplName, px1, py1, px2, py2,
+			SD(TheKey_originalOwner), SD(TheKey_objectName), SD(TheKey_objectScriptAttachment),
+			SI(TheKey_objectInitialHealth), SI(TheKey_objectMaxHPs),
+			SI(TheKey_objectWeather), SI(TheKey_objectTime),
+			SB(TheKey_objectEnabled), SB(TheKey_objectIndestructible),
+			SB(TheKey_objectUnsellable), SB(TheKey_objectTargetable),
+			SB(TheKey_objectPowered), SB(TheKey_objectSelectable));
+#undef SD
+#undef SI
+#undef SB
+	};
+
+	if (sel->getFlag(FLAG_BRIDGE_POINT1)) {
+		MapObject* p2 = sel->getNext();
+		float x2 = wx, y2 = wy;
+		if (p2 && p2->getFlag(FLAG_BRIDGE_POINT2)) {
+			const Coord3D* l2 = p2->getLocation();
+			if (l2) { x2 = l2->x; y2 = l2->y; }
+		}
+		writeBridgeProps(sel->getName().str(), wx, wy, x2, y2, d);
+		return 0;
+	}
+
+	if (sel->getFlag(FLAG_BRIDGE_POINT2)) {
+		for (MapObject* p = MapObject::getFirstMapObject(); p; p = p->getNext()) {
+			if (!p->getFlag(FLAG_BRIDGE_POINT1) || p->getNext() != sel) continue;
+			const Coord3D* l1 = p->getLocation();
+			float px1 = l1 ? l1->x : 0.f, py1 = l1 ? l1->y : 0.f;
+			writeBridgeProps(p->getName().str(), px1, py1, wx, wy, p->getProperties());
+			return 0;
+		}
+		_snprintf(buf, maxLen, "{\"ok\":true,\"type\":\"none\"}");
+		return 0;
+	}
 
 	bool isUnit = tmpl && (tmpl->isKindOf(KINDOF_INFANTRY) || tmpl->isKindOf(KINDOF_VEHICLE) || tmpl->isKindOf(KINDOF_HERO));
 	bool isStructure = tmpl && tmpl->isKindOf(KINDOF_STRUCTURE);
@@ -2160,21 +2237,26 @@ LRESULT CMainFrame::OnWbGetSideList(WPARAM wParam, LPARAM lParam)
 			"{\"name\":\"%s\",\"owner\":\"%s\",\"home\":\"%s\",\"units\":[",
 			tName.str(), tOwner.str(), tHome.str());
 
-		// Unit slots: teamObject_0..N and teamObjectCount_0..N
+		// TheSuperHackers @bugfix Nemellud 10/06/2026 EmbeddedMode: read the engine's
+		// well-known unit slot keys (teamUnitType1..7) instead of made-up teamObject_N keys.
+		// "count" kept as alias of maxCount for older UI callers.
 		bool firstUnit = true;
-		for (int ui = 0; ui < 20 && pos < maxLen - 128; ui++) {
-			char objKey[64], cntKey[64];
-			_snprintf(objKey, sizeof(objKey), "teamObject_%d", ui);
-			_snprintf(cntKey, sizeof(cntKey), "teamObjectCount_%d", ui);
-			NameKeyType objNK = NAMEKEY(objKey);
-			NameKeyType cntNK = NAMEKEY(cntKey);
-			AsciiString tpl = d ? d->getAsciiString(objNK, &exists) : AsciiString("");
-			if (!exists || tpl.isEmpty()) break;
-			int cnt = d ? d->getInt(cntNK, &exists) : 1;
+		for (int ui = 1; ui <= 7 && pos < maxLen - 160; ui++) {
+			char objKey[64], minKey[64], maxKey[64];
+			_snprintf(objKey, sizeof(objKey), "teamUnitType%d",     ui);
+			_snprintf(minKey, sizeof(minKey), "teamUnitMinCount%d", ui);
+			_snprintf(maxKey, sizeof(maxKey), "teamUnitMaxCount%d", ui);
+			AsciiString tpl = d ? d->getAsciiString(NAMEKEY(objKey), &exists) : AsciiString("");
+			if (!exists || tpl.isEmpty() || tpl == AsciiString("<none>")) continue;
+			int minCnt = d ? d->getInt(NAMEKEY(minKey), &exists) : 0;
+			if (!exists) minCnt = 0;
+			int maxCnt = d ? d->getInt(NAMEKEY(maxKey), &exists) : 1;
+			if (!exists) maxCnt = 1;
 			if (!firstUnit) { if (pos < maxLen - 1) buf[pos++] = ','; }
 			firstUnit = false;
 			pos += _snprintf(buf + pos, maxLen - pos,
-				"{\"template\":\"%s\",\"count\":%d}", tpl.str(), cnt);
+				"{\"template\":\"%s\",\"minCount\":%d,\"maxCount\":%d,\"count\":%d}",
+				tpl.str(), minCnt, maxCnt, maxCnt);
 		}
 
 		if (pos < maxLen - 2) { buf[pos++] = ']'; buf[pos++] = '}'; }
@@ -2573,6 +2655,36 @@ LRESULT CMainFrame::OnWbSelectObject(WPARAM, LPARAM lParam)
 	return target ? 1 : 0;
 }
 
+// TheSuperHackers @feature Nemellud 06/06/2026 EmbeddedMode: handle generic pipe sub-commands (SUBCMD_LOAD)
+LRESULT CMainFrame::OnWbPipeCmd(WPARAM wParam, LPARAM lParam)
+{
+	if (wParam == 1 /* SUBCMD_LOAD */) {
+		char* path = reinterpret_cast<char*>(lParam);
+		if (path) {
+			AfxGetApp()->OpenDocumentFile(path);
+			free(path);
+		}
+	}
+	return 0;
+}
+
+// TheSuperHackers @feature Nemellud 06/06/2026 EmbeddedMode: create new map via pipe (no native dialog)
+LRESULT CMainFrame::OnWbNewMap(WPARAM, LPARAM)
+{
+	// g_wbNewMapReq is already set by WbPipeServer; trigger File New to invoke OnNewDocument
+	PostMessage(WM_COMMAND, ID_FILE_NEW, 0);
+	return 0;
+}
+
+// TheSuperHackers @feature Nemellud 06/06/2026 EmbeddedMode: resize map via pipe (no native dialog)
+LRESULT CMainFrame::OnWbResizeMap(WPARAM, LPARAM)
+{
+	CWorldBuilderDoc* pDoc = (CWorldBuilderDoc*)GetActiveDocument();
+	if (pDoc)
+		pDoc->ResizeFromPipe();
+	return 0;
+}
+
 LRESULT CMainFrame::OnWbSetTeam(WPARAM, LPARAM lParam)
 {
 	// TheSuperHackers @feature Nemellud 30/05/2026 EmbeddedMode: create/update team via pipe
@@ -2597,6 +2709,9 @@ LRESULT CMainFrame::OnWbSetTeam(WPARAM, LPARAM lParam)
 	if (home[0]) newDict.setAsciiString(TheKey_teamHome, AsciiString(home));
 	newDict.setInt(TheKey_teamMaxInstances, maxInst > 0 ? maxInst : 1);
 
+	// TheSuperHackers @bugfix Nemellud 10/06/2026 EmbeddedMode: unit slots were written to
+	// made-up dict keys (teamObject_N); the engine and the Team dialog read the well-known
+	// keys teamUnitType1..7 / teamUnitMinCount1..7 / teamUnitMaxCount1..7 (1-indexed).
 	// Unit slots: unit0_template, unit0_min, unit0_max (max fallback: unit0_count)
 	for (int ui = 0; ui < 7; ui++) {
 		char tplKey[64], minKey[64], maxKey[64], cntKey[64], tpl[128];
@@ -2608,12 +2723,12 @@ LRESULT CMainFrame::OnWbSetTeam(WPARAM, LPARAM lParam)
 		if (!MF_JsonGetStr(json, tplKey, tpl, sizeof(tpl)) || !tpl[0]) break;
 		MF_JsonGetInt(json, minKey, &minCnt);
 		if (!MF_JsonGetInt(json, maxKey, &maxCnt)) MF_JsonGetInt(json, cntKey, &maxCnt);
-		char objKey[64], cntFKey[64], minFKey[64];
-		_snprintf(objKey,  sizeof(objKey),  "teamObject_%d",         ui);
-		_snprintf(cntFKey, sizeof(cntFKey), "teamObjectCount_%d",    ui);
-		_snprintf(minFKey, sizeof(minFKey), "teamObjectMinCount_%d", ui);
-		newDict.setAsciiString(NAMEKEY(objKey),  AsciiString(tpl));
-		newDict.setInt(NAMEKEY(cntFKey), maxCnt > 0 ? maxCnt : 1);
+		char objKey[64], minFKey[64];
+		_snprintf(objKey,  sizeof(objKey),  "teamUnitType%d",     ui + 1);
+		_snprintf(maxKey,  sizeof(maxKey),  "teamUnitMaxCount%d", ui + 1);
+		_snprintf(minFKey, sizeof(minFKey), "teamUnitMinCount%d", ui + 1);
+		newDict.setAsciiString(NAMEKEY(objKey), AsciiString(tpl));
+		newDict.setInt(NAMEKEY(maxKey),  maxCnt > 0 ? maxCnt : 1);
 		newDict.setInt(NAMEKEY(minFKey), minCnt >= 0 ? minCnt : 0);
 	}
 
@@ -2984,5 +3099,329 @@ LRESULT CMainFrame::OnWbAddSkirmish(WPARAM wParam, LPARAM lParam)
 	if (responseBuf)
 		_snprintf(responseBuf, responseBufLen, "{\"ok\":true,\"added\":%d}", added);
 	return 0;
+}
+
+// TheSuperHackers @feature Nemellud 07/06/2026 EmbeddedMode: place road segment via pipe
+static bool MF_JsonGetFloat(const char* json, const char* key, float* out) {
+	char pat[64]; _snprintf(pat, sizeof(pat), "\"%s\"", key);
+	const char* p = strstr(json, pat); if (!p) return false;
+	p += strlen(pat); while (*p == ':' || *p == ' ') p++;
+	return sscanf(p, "%f", out) == 1;
+}
+
+LRESULT CMainFrame::OnWbPlaceRoad(WPARAM, LPARAM lp)
+{
+	char* json = reinterpret_cast<char*>(lp);
+	if (!json) return 0;
+	float x1=0, y1=0, x2=0, y2=0;
+	char roadType[128] = "TwoLane";
+	int corner = 0;
+	MF_JsonGetFloat(json, "x1", &x1); MF_JsonGetFloat(json, "y1", &y1);
+	MF_JsonGetFloat(json, "x2", &x2); MF_JsonGetFloat(json, "y2", &y2);
+	MF_JsonGetStr(json, "type", roadType, sizeof(roadType));
+	MF_JsonGetInt(json, "corner", &corner);
+	delete[] json;
+
+	CWorldBuilderDoc* pDoc = (CWorldBuilderDoc*)GetActiveDocument();
+	if (!pDoc) return 0;
+
+	Coord3D loc1 = {x1, y1, 0.0f};
+	Coord3D loc2 = {x2, y2, 0.0f};
+	AsciiString roadName(roadType);
+
+	MapObject* pNew1 = newInstance(MapObject)(loc1, roadName, 0.0f, 0, nullptr, nullptr);
+	MapObject* pNew2 = newInstance(MapObject)(loc2, roadName, 0.0f, 0, nullptr, nullptr);
+	pNew1->setColor(RGB(255,255,0));
+	pNew2->setColor(RGB(255,255,0));
+	pNew1->setFlag(FLAG_ROAD_POINT1);
+	pNew2->setFlag(FLAG_ROAD_POINT2);
+	if (corner == 1) {
+		pNew1->setFlag(FLAG_ROAD_CORNER_ANGLED); pNew2->setFlag(FLAG_ROAD_CORNER_ANGLED);
+	} else if (corner == 2) {
+		pNew1->setFlag(FLAG_ROAD_CORNER_TIGHT); pNew2->setFlag(FLAG_ROAD_CORNER_TIGHT);
+	}
+	pNew1->getProperties()->setAsciiString(TheKey_originalOwner, "team");
+	pNew2->getProperties()->setAsciiString(TheKey_originalOwner, "team");
+	pNew1->setNextMap(pNew2);
+
+	AddObjectUndoable* pUndo = new AddObjectUndoable(pDoc, pNew1);
+	pDoc->AddAndDoUndoable(pUndo);
+	REF_PTR_RELEASE(pUndo);
+	pDoc->updateAllViews();
+	return 1;
+}
+
+// TheSuperHackers @feature Nemellud 07/06/2026 EmbeddedMode: list all road segments via pipe
+LRESULT CMainFrame::OnWbListRoads(WPARAM wParam, LPARAM lParam)
+{
+	char* buf = reinterpret_cast<char*>(lParam);
+	int maxLen = (int)wParam;
+	if (!buf || maxLen < 32) return 0;
+
+	int pos = 0;
+	pos += _snprintf(buf + pos, maxLen - pos, "{\"ok\":true,\"roads\":[");
+	bool first = true;
+	for (MapObject* p = MapObject::getFirstMapObject(); p; p = p->getNext()) {
+		if (!p->getFlag(FLAG_ROAD_POINT1)) continue;
+		MapObject* p2 = p->getNext();
+		if (!p2 || !p2->getFlag(FLAG_ROAD_POINT2)) continue;
+		const Coord3D* l1 = p->getLocation();
+		const Coord3D* l2 = p2->getLocation();
+		if (!first && pos < maxLen - 2) buf[pos++] = ',';
+		pos += _snprintf(buf + pos, maxLen - pos,
+			"{\"type\":\"%s\",\"x1\":%.1f,\"y1\":%.1f,\"x2\":%.1f,\"y2\":%.1f,\"flags\":%d}",
+			p->getName().str(),
+			l1 ? l1->x : 0.f, l1 ? l1->y : 0.f,
+			l2 ? l2->x : 0.f, l2 ? l2->y : 0.f,
+			(int)p->getFlags());
+		first = false;
+	}
+	if (pos < maxLen - 2) { buf[pos++] = ']'; buf[pos++] = '}'; buf[pos] = '\0'; }
+	return 0;
+}
+
+// TheSuperHackers @feature Nemellud 07/06/2026 EmbeddedMode: delete road or bridge nearest to coords
+// Coords in g_wbDelRoadReq (filled by pipe thread before SendMessage); wParam=bufLen, lParam=char* buf.
+extern struct WbDelRoadReq { float x1, y1; bool bridge; } g_wbDelRoadReq;
+LRESULT CMainFrame::OnWbDelRoad(WPARAM wParam, LPARAM lParam)
+{
+	float tx = g_wbDelRoadReq.x1, ty = g_wbDelRoadReq.y1;
+	bool isBridge = g_wbDelRoadReq.bridge;
+	Int flagP1 = isBridge ? FLAG_BRIDGE_POINT1 : FLAG_ROAD_POINT1;
+	Int flagP2 = isBridge ? FLAG_BRIDGE_POINT2 : FLAG_ROAD_POINT2;
+
+	CWorldBuilderDoc* pDoc = (CWorldBuilderDoc*)GetActiveDocument();
+	if (!pDoc) return 0;
+
+	MapObject* best1 = nullptr;
+	float bestDist = 1e9f;
+	for (MapObject* p = MapObject::getFirstMapObject(); p; p = p->getNext()) {
+		if (!p->getFlag(flagP1)) continue;
+		MapObject* p2 = p->getNext();
+		if (!p2 || !p2->getFlag(flagP2)) continue;
+		const Coord3D* l = p->getLocation();
+		if (!l) continue;
+		float dx = l->x - tx, dy = l->y - ty;
+		float d = dx*dx + dy*dy;
+		if (d < bestDist) { bestDist = d; best1 = p; }
+	}
+	if (!best1) return 0;
+	MapObject* best2 = best1->getNext();
+	for (MapObject* p = MapObject::getFirstMapObject(); p; p = p->getNext())
+		p->setSelected(false);
+	best1->setSelected(true);
+	if (best2) best2->setSelected(true);
+	DeleteObjectUndoable* pUndo = new DeleteObjectUndoable(pDoc);
+	pDoc->AddAndDoUndoable(pUndo);
+	REF_PTR_RELEASE(pUndo);
+	pDoc->updateAllViews();
+	return 1;
+}
+
+// TheSuperHackers @feature Nemellud 07/06/2026 EmbeddedMode: select road or bridge in WB from UI list
+LRESULT CMainFrame::OnWbSelRoad(WPARAM, LPARAM lp)
+{
+	char* json = reinterpret_cast<char*>(lp);
+	if (!json) return 0;
+	float tx = 0, ty = 0; int bridge = 0;
+	MF_JsonGetFloat(json, "x1", &tx); MF_JsonGetFloat(json, "y1", &ty);
+	MF_JsonGetInt(json, "bridge", &bridge);
+	delete[] json;
+
+	Int flagP1 = bridge ? FLAG_BRIDGE_POINT1 : FLAG_ROAD_POINT1;
+	Int flagP2 = bridge ? FLAG_BRIDGE_POINT2 : FLAG_ROAD_POINT2;
+
+	CWorldBuilderDoc* pDoc = (CWorldBuilderDoc*)GetActiveDocument();
+	if (!pDoc) return 0;
+
+	MapObject* best1 = nullptr;
+	float bestDist = 1e9f;
+	for (MapObject* p = MapObject::getFirstMapObject(); p; p = p->getNext()) {
+		if (!p->getFlag(flagP1)) continue;
+		MapObject* p2 = p->getNext();
+		if (!p2 || !p2->getFlag(flagP2)) continue;
+		const Coord3D* l = p->getLocation();
+		if (!l) continue;
+		float dx = l->x - tx, dy = l->y - ty;
+		float d = dx*dx + dy*dy;
+		if (d < bestDist) { bestDist = d; best1 = p; }
+	}
+	if (!best1) return 0;
+
+	for (MapObject* p = MapObject::getFirstMapObject(); p; p = p->getNext())
+		p->setSelected(false);
+	best1->setSelected(true);
+	MapObject* best2 = best1->getNext();
+	if (best2 && best2->getFlag(flagP2)) best2->setSelected(true);
+	pDoc->updateAllViews();
+	return 1;
+}
+
+// TheSuperHackers @feature Nemellud 07/06/2026 EmbeddedMode: place bridge segment via pipe
+LRESULT CMainFrame::OnWbPlaceBridge(WPARAM, LPARAM lp)
+{
+	char* json = reinterpret_cast<char*>(lp);
+	if (!json) return 0;
+	float x1=0, y1=0, x2=0, y2=0;
+	char bridgeType[128] = "TwoLane";
+	MF_JsonGetFloat(json, "x1", &x1); MF_JsonGetFloat(json, "y1", &y1);
+	MF_JsonGetFloat(json, "x2", &x2); MF_JsonGetFloat(json, "y2", &y2);
+	MF_JsonGetStr(json, "type", bridgeType, sizeof(bridgeType));
+	delete[] json;
+
+	CWorldBuilderDoc* pDoc = (CWorldBuilderDoc*)GetActiveDocument();
+	if (!pDoc) return 0;
+
+	Coord3D loc1 = {x1, y1, 0.0f};
+	Coord3D loc2 = {x2, y2, 0.0f};
+	AsciiString bName(bridgeType);
+
+	// Always create a two-point bridge (POINT1 + POINT2).
+	// Landmark/destructible bridges (AsianFloodBridge etc.) share their name with roads.ini Bridge
+	// entries but belong in the Objects panel — placing them here via two-point is correct behavior.
+	int bridgeN = 0;
+	for (MapObject* p = MapObject::getFirstMapObject(); p; p = p->getNext())
+		if (p->getFlag(FLAG_BRIDGE_POINT1) && p->getName() == bName) bridgeN++;
+
+	MapObject* pNew1 = newInstance(MapObject)(loc1, bName, 0.0f, 0, nullptr, nullptr);
+	MapObject* pNew2 = newInstance(MapObject)(loc2, bName, 0.0f, 0, nullptr, nullptr);
+	pNew1->setColor(RGB(255,255,0));
+	pNew2->setColor(RGB(255,255,0));
+	pNew1->setFlag(FLAG_BRIDGE_POINT1);
+	pNew2->setFlag(FLAG_BRIDGE_POINT2);
+	pNew1->getProperties()->setAsciiString(TheKey_originalOwner, "team");
+	pNew2->getProperties()->setAsciiString(TheKey_originalOwner, "team");
+
+	char autoName[128];
+	_snprintf(autoName, sizeof(autoName), "%s_%02d", bName.str(), bridgeN + 1);
+	pNew1->getProperties()->setAsciiString(TheKey_objectName, AsciiString(autoName));
+
+	pNew1->setNextMap(pNew2);
+	AddObjectUndoable* pUndo = new AddObjectUndoable(pDoc, pNew1);
+	pDoc->AddAndDoUndoable(pUndo);
+	REF_PTR_RELEASE(pUndo);
+
+	pDoc->updateAllViews();
+	return 1;
+}
+
+// TheSuperHackers @feature Nemellud 07/06/2026 EmbeddedMode: list all bridge segments via pipe
+LRESULT CMainFrame::OnWbListBridges(WPARAM wParam, LPARAM lParam)
+{
+	char* buf = reinterpret_cast<char*>(lParam);
+	int maxLen = (int)wParam;
+	if (!buf || maxLen < 32) return 0;
+
+	int pos = 0;
+	pos += _snprintf(buf + pos, maxLen - pos, "{\"ok\":true,\"bridges\":[");
+	bool first = true;
+
+	// Two-point bridges (POINT1 + POINT2 pairs)
+	for (MapObject* p = MapObject::getFirstMapObject(); p; p = p->getNext()) {
+		if (!p->getFlag(FLAG_BRIDGE_POINT1)) continue;
+		MapObject* p2 = p->getNext();
+		if (!p2 || !p2->getFlag(FLAG_BRIDGE_POINT2)) continue;
+		const Coord3D* l1 = p->getLocation();
+		const Coord3D* l2 = p2->getLocation();
+		if (!first && pos < maxLen - 2) buf[pos++] = ',';
+		char objName[128] = "";
+		const Dict* bd = p->getProperties();
+		if (bd) {
+			Bool bex = FALSE;
+			AsciiString sn = bd->getAsciiString(TheKey_objectName, &bex);
+			if (bex) strncpy(objName, sn.str(), sizeof(objName) - 1);
+		}
+		pos += _snprintf(buf + pos, maxLen - pos,
+			"{\"type\":\"%s\",\"name\":\"%s\",\"x1\":%.1f,\"y1\":%.1f,\"x2\":%.1f,\"y2\":%.1f}",
+			p->getName().str(), objName,
+			l1 ? l1->x : 0.f, l1 ? l1->y : 0.f,
+			l2 ? l2->x : 0.f, l2 ? l2->y : 0.f);
+		first = false;
+	}
+
+	// Single-point (landmark) bridges placed via Objects panel — isBridge() == true
+	for (MapObject* p = MapObject::getFirstMapObject(); p; p = p->getNext()) {
+		if (p->getFlag(FLAG_BRIDGE_POINT1) || p->getFlag(FLAG_BRIDGE_POINT2)) continue;
+		const ThingTemplate* tt = p->getThingTemplate();
+		if (!tt || !tt->isBridge()) continue;
+		const Coord3D* l1 = p->getLocation();
+		if (!first && pos < maxLen - 2) buf[pos++] = ',';
+		char objName[128] = "";
+		const Dict* bd = p->getProperties();
+		if (bd) {
+			Bool bex = FALSE;
+			AsciiString sn = bd->getAsciiString(TheKey_objectName, &bex);
+			if (bex) strncpy(objName, sn.str(), sizeof(objName) - 1);
+		}
+		pos += _snprintf(buf + pos, maxLen - pos,
+			"{\"type\":\"%s\",\"name\":\"%s\",\"x1\":%.1f,\"y1\":%.1f,\"x2\":%.1f,\"y2\":%.1f,\"landmark\":true}",
+			p->getName().str(), objName,
+			l1 ? l1->x : 0.f, l1 ? l1->y : 0.f,
+			l1 ? l1->x : 0.f, l1 ? l1->y : 0.f);
+		first = false;
+	}
+
+	if (pos < maxLen - 2) { buf[pos++] = ']'; buf[pos++] = '}'; buf[pos] = '\0'; }
+	return 0;
+}
+
+// TheSuperHackers @feature Nemellud 07/06/2026 EmbeddedMode: set objectName on bridge POINT1 by coordinates
+LRESULT CMainFrame::OnWbSetBridgeName(WPARAM, LPARAM lp)
+{
+	char* json = reinterpret_cast<char*>(lp);
+	if (!json) return 0;
+	float tx = 0, ty = 0;
+	char name[128] = "";
+	MF_JsonGetFloat(json, "x1", &tx);
+	MF_JsonGetFloat(json, "y1", &ty);
+	MF_JsonGetStr(json, "name", name, sizeof(name));
+	delete[] json;
+
+	MapObject* best1 = nullptr;
+	float bestDist = 1e9f;
+	for (MapObject* p = MapObject::getFirstMapObject(); p; p = p->getNext()) {
+		if (!p->getFlag(FLAG_BRIDGE_POINT1)) continue;
+		const Coord3D* l = p->getLocation();
+		if (!l) continue;
+		float dx = l->x - tx, dy = l->y - ty;
+		float d = dx*dx + dy*dy;
+		if (d < bestDist) { bestDist = d; best1 = p; }
+	}
+	if (!best1) return 0;
+
+	Dict* d = best1->getProperties();
+	if (!d) return 0;
+	d->setAsciiString(TheKey_objectName, AsciiString(name));
+
+	CWorldBuilderDoc* pDoc = (CWorldBuilderDoc*)GetActiveDocument();
+	if (pDoc) pDoc->updateAllViews();
+	return 1;
+}
+
+// TheSuperHackers @feature Nemellud 07/06/2026 EmbeddedMode: set road type/corner in RoadOptions (activation via separate 'tool' pipe command)
+LRESULT CMainFrame::OnWbSetRoadTool(WPARAM, LPARAM lp)
+{
+	char* json = reinterpret_cast<char*>(lp);
+	if (!json) return 0;
+	char roadName[128] = "";
+	int angled = 0, tight = 0, bridge = 0;
+	MF_JsonGetStr(json, "name",   roadName, sizeof(roadName));
+	MF_JsonGetInt(json, "angled", &angled);
+	MF_JsonGetInt(json, "tight",  &tight);
+	MF_JsonGetInt(json, "bridge", &bridge);
+	delete[] json;
+
+	RoadOptions::setFromPipe(roadName[0] ? roadName : nullptr, !!angled, !!tight, !!bridge);
+	return 1;
+}
+
+// TheSuperHackers @feature Nemellud 10/06/2026 EmbeddedMode: save map to explicit path without native dialog
+LRESULT CMainFrame::OnWbSaveToPath(WPARAM, LPARAM)
+{
+	CWorldBuilderDoc* pDoc = (CWorldBuilderDoc*)GetActiveDocument();
+	if (!pDoc || g_wbSavePath[0] == '\0') return 0;
+	BOOL ok = pDoc->SaveToPath(g_wbSavePath);
+	g_wbSavePath[0] = '\0';
+	return ok ? 1 : 0;
 }
 
