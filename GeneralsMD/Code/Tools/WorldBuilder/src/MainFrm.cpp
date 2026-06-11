@@ -3479,15 +3479,18 @@ LRESULT CMainFrame::OnWbSetLighting(WPARAM wParam, LPARAM lParam)
 	strncpy(json, buf, sizeof(json) - 1); json[sizeof(json) - 1] = '\0';
 
 	WbView3d* pView = CWorldBuilderDoc::GetActive3DView();
+	if (!pView) pView = WbView3d::s_instance;
 	if (!pView) { _snprintf(buf, maxLen, "{\"ok\":false,\"error\":\"no 3d view\"}"); return 0; }
 
+	bool todChanged = false;
 	int tod;
 	if (MF_JsonGetInt(json, "timeOfDay", &tod)) {
 		if (tod < TIME_OF_DAY_FIRST) tod = TIME_OF_DAY_FIRST;
 		if (tod >= TIME_OF_DAY_COUNT) tod = TIME_OF_DAY_COUNT - 1;
 		TheWritableGlobalData->m_timeOfDay = (TimeOfDay)tod;
+		TheWritableGlobalData->setTimeOfDay((TimeOfDay)tod);
 		pView->resetRenderObjects();
-		pView->invalObjectInView(nullptr);
+		todChanged = true;
 	}
 
 	int curTod = (int)TheGlobalData->m_timeOfDay;
@@ -3529,14 +3532,14 @@ LRESULT CMainFrame::OnWbSetLighting(WPARAM wParam, LPARAM lParam)
 		changed = true;
 	}
 
-	if (changed) {
+	if (changed)
 		pView->setLighting(&tl, target, light);
-		// TheSuperHackers @bugfix Nemellud 11/06/2026 EmbeddedMode: setLighting only marks the window
-		// dirty; the terrain keeps its baked per-vertex lighting until the render objects are
-		// invalidated. Without this the change is invisible until the user toggles 2D/3D (which
-		// calls invalObjectInView via setTopDownProjection). Force the same refresh now.
-		pView->invalObjectInView(nullptr);
-	}
+
+	// TheSuperHackers @bugfix Nemellud 11/06/2026 EmbeddedMode: setLighting only flags the terrain
+	// dirty; in embedded mode the change stayed invisible until a 2D/3D toggle forced a rebuild.
+	// refreshLightingNow re-lights the terrain and renders synchronously right now.
+	if (changed || todChanged)
+		pView->refreshLightingNow();
 
 	_snprintf(buf, maxLen, "{\"ok\":true}");
 	return 0;
@@ -3548,9 +3551,10 @@ LRESULT CMainFrame::OnWbResetLighting(WPARAM wParam, LPARAM lParam)
 	char* buf = (char*)lParam;
 	int maxLen = (int)wParam;
 	GlobalLightOptions::resetLightingToDefaults();
-	// Force the terrain to re-light immediately (see OnWbSetLighting note).
+	// Force the terrain to re-light + render immediately (see OnWbSetLighting note).
 	WbView3d* pView = CWorldBuilderDoc::GetActive3DView();
-	if (pView) pView->invalObjectInView(nullptr);
+	if (!pView) pView = WbView3d::s_instance;
+	if (pView) pView->refreshLightingNow();
 	if (buf && maxLen > 16) _snprintf(buf, maxLen, "{\"ok\":true}");
 	return 0;
 }

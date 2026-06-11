@@ -366,6 +366,9 @@ void WbView3d::setObjTracking(MapObject *pMapObj,  Coord3D pos, Real angle, Bool
 // ----------------------------------------------------------------------------
 IMPLEMENT_DYNCREATE(WbView3d, WbView)
 
+// TheSuperHackers @feature Nemellud 25/05/2026 EmbeddedMode: direct view access bypassing MDI state
+WbView3d* WbView3d::s_instance = nullptr;
+
 // ----------------------------------------------------------------------------
 WbView3d::WbView3d() :
 	m_assetManager(nullptr),
@@ -422,8 +425,12 @@ WbView3d::WbView3d() :
 	}
 
 	m_showWireframe = (::AfxGetApp()->GetProfileInt(MAIN_FRAME_SECTION, "ShowWireframe", 0) != 0);
-	m_showEntireMap = (::AfxGetApp()->GetProfileInt(MAIN_FRAME_SECTION, "ShowEntireMap", 1) != 0);
+	// TheSuperHackers @fix Nemellud 06/06/2026 EmbeddedMode: always show entire map on init — partial modes visible via View menu but not persisted.
+	m_showEntireMap = true;
+	(void)(::AfxGetApp()->GetProfileInt(MAIN_FRAME_SECTION, "ShowEntireMap", 1)); // kept for compat but value ignored
 	m_projection = (::AfxGetApp()->GetProfileInt(MAIN_FRAME_SECTION, "ShowTopDownView", 0) != 0);
+	// TheSuperHackers @feature Nemellud 25/05/2026 EmbeddedMode: always start in top-down
+	if (CWorldBuilderApp::IsEmbedded()) m_projection = true;
 	m_showShadows = (::AfxGetApp()->GetProfileInt(MAIN_FRAME_SECTION, "ShowShadows", 1) != 0);
 	TheWritableGlobalData->m_useShadowDecals = m_showShadows;
 	TheWritableGlobalData->m_useShadowVolumes = m_showShadows;
@@ -436,11 +443,13 @@ WbView3d::WbView3d() :
 	setShowGarrisoned(::AfxGetApp()->GetProfileInt(MAIN_FRAME_SECTION, "ShowGarrisoned", 0) != 0);
 	setHighlightTestArt(::AfxGetApp()->GetProfileInt(MAIN_FRAME_SECTION, "HighlightTestArt", 0) != 0);
 	setShowLetterbox(::AfxGetApp()->GetProfileInt(MAIN_FRAME_SECTION, "ShowLetterbox", 0) != 0);
+	s_instance = this;
 }
 
 // ----------------------------------------------------------------------------
 WbView3d::~WbView3d()
 {
+	if (s_instance == this) s_instance = nullptr;
 	for (Int i=0; i<MAX_GLOBAL_LIGHTS; i++)
 	{
 		if (m_lightFeedbackMesh[i] != nullptr)
@@ -863,6 +872,24 @@ void WbView3d::stepTimeOfDay()
 	}
 	resetRenderObjects();
 	invalObjectInView(nullptr);
+}
+
+// ----------------------------------------------------------------------------
+// TheSuperHackers @feature Nemellud 11/06/2026 EmbeddedMode: re-light the terrain and render now.
+// setLighting marks m_needFullUpdate on the terrain, but in embedded mode the change only became
+// visible after a 2D/3D toggle (setTopDownProjection forced a rebuild). This forces the rebuild +
+// a synchronous redraw directly, so pipe-driven lighting edits show immediately.
+void WbView3d::refreshLightingNow()
+{
+	if (m_heightMapRenderObj) {
+		// staticLightingChanged() alone only flags m_needFullUpdate; the deferred redraw path did not
+		// re-light the terrain in embedded mode. forceRelight() runs the full updateBlock rebuild now.
+		m_heightMapRenderObj->staticLightingChanged();
+		m_heightMapRenderObj->forceRelight();
+	}
+	invalObjectInView(nullptr);
+	Invalidate(false);
+	redraw();
 }
 
 // ----------------------------------------------------------------------------
@@ -1361,7 +1388,7 @@ void WbView3d::invalObjectInView(MapObject *pMapObjIn)
 	Bool updateAllTrees = false;
 	if (m_heightMapRenderObj == nullptr) {
 		m_heightMapRenderObj = NEW_REF(WBHeightMap,());
-
+		m_heightMapRenderObj->setFlattenHeights(m_projection);
 		m_scene->Add_Render_Object(m_heightMapRenderObj);
 	}
 	if (pMapObjIn == nullptr) {
@@ -2211,6 +2238,8 @@ BEGIN_MESSAGE_MAP(WbView3d, WbView)
 	ON_UPDATE_COMMAND_UI(ID_VIEW_SHOWAMBIENTSOUNDS, OnUpdateViewShowAmbientSounds)
   ON_COMMAND(ID_VIEW_SHOW_SOUND_CIRCLES, OnViewShowSoundCircles)
   ON_UPDATE_COMMAND_UI(ID_VIEW_SHOW_SOUND_CIRCLES, OnUpdateViewShowSoundCircles)
+	ON_COMMAND(ID_VIEW_SHOWWAYPOINTS,        OnViewShowwaypointsRefresh)
+	ON_COMMAND(ID_VIEW_SHOWPOLYGONTRIGGERS,  OnViewShowpolygontriggersRefresh)
 	//}}AFX_MSG_MAP
 END_MESSAGE_MAP()
 
@@ -2947,6 +2976,10 @@ void WbView3d::OnEditSelectmacrotexture()
 void WbView3d::OnViewShowshadows()
 {
 	m_showShadows = !m_showShadows;
+
+	TheWritableGlobalData->m_useShadowDecals = m_showShadows;
+	TheWritableGlobalData->m_useShadowVolumes = m_showShadows;
+
 	if (m_showShadows) {
 		int w,h,bits;
 		Bool windowed;
@@ -2955,15 +2988,16 @@ void WbView3d::OnViewShowshadows()
 		if (bits != 32) {
 			::AfxMessageBox("Shadows require a 32 bit color desktop.", IDOK);
 			m_showShadows = false;
+			TheWritableGlobalData->m_useShadowDecals = false;
+			TheWritableGlobalData->m_useShadowVolumes = false;
 		} else {
 			resetRenderObjects();
 			invalObjectInView(nullptr);
+			redraw();
 		}
 	} else {
 		TheW3DShadowManager->removeAllShadows();
 	}
-	TheWritableGlobalData->m_useShadowDecals = m_showShadows;
-	TheWritableGlobalData->m_useShadowVolumes = m_showShadows;
 	::AfxGetApp()->WriteProfileInt(MAIN_FRAME_SECTION, "ShowShadows", m_showShadows?1:0);
 }
 
@@ -3029,6 +3063,7 @@ void WbView3d::OnViewShowModels()
 	::AfxGetApp()->WriteProfileInt(MAIN_FRAME_SECTION, "ShowModels", getShowModels()?1:0);
 	resetRenderObjects();
 	invalObjectInView(nullptr);
+	Invalidate(false);
 }
 void WbView3d::OnUpdateViewShowModels(CCmdUI* pCmdUI)
 {
@@ -3042,6 +3077,7 @@ void WbView3d::OnViewBoundingBoxes()
 	::AfxGetApp()->WriteProfileInt(MAIN_FRAME_SECTION, "ShowBoundingBoxes", getShowBoundingBoxes()?1:0);
 	resetRenderObjects();
 	invalObjectInView(nullptr);
+	Invalidate(false);
 }
 // MLL C&C3
 void WbView3d::OnUpdateViewBoundingBoxes(CCmdUI* pCmdUI)
@@ -3057,6 +3093,7 @@ void WbView3d::OnViewSightRanges()
 	::AfxGetApp()->WriteProfileInt(MAIN_FRAME_SECTION, "ShowSightRanges", getShowSightRanges()?1:0);
 	resetRenderObjects();
 	invalObjectInView(nullptr);
+	Invalidate(false);
 }
 // MLL C&C3
 void WbView3d::OnUpdateViewSightRanges(CCmdUI* pCmdUI)
@@ -3071,6 +3108,7 @@ void WbView3d::OnViewWeaponRanges()
 	::AfxGetApp()->WriteProfileInt(MAIN_FRAME_SECTION, "ShowWeaponRanges", getShowWeaponRanges()?1:0);
 	resetRenderObjects();
 	invalObjectInView(nullptr);
+	Invalidate(false);
 }
 // MLL C&C3
 void WbView3d::OnUpdateViewWeaponRanges(CCmdUI* pCmdUI)
@@ -3085,6 +3123,7 @@ void WbView3d::OnHighlightTestArt()
 	::AfxGetApp()->WriteProfileInt(MAIN_FRAME_SECTION, "HighlightTestArt", getHighlightTestArt()?1:0);
 	resetRenderObjects();
 	invalObjectInView(nullptr);
+	Invalidate(false);
 }
 // MLL C&C3
 void WbView3d::OnUpdateHighlightTestArt(CCmdUI* pCmdUI)
@@ -3112,10 +3151,25 @@ void WbView3d::OnViewGarrisoned()
 	::AfxGetApp()->WriteProfileInt(MAIN_FRAME_SECTION, "ShowGarrisoned", getShowGarrisoned()?1:0);
 	resetRenderObjects();
 	invalObjectInView(nullptr);
+	Invalidate(false);
 }
 void WbView3d::OnUpdateViewGarrisoned(CCmdUI* pCmdUI)
 {
 	pCmdUI->SetCheck(getShowGarrisoned()?1:0);
+}
+
+void WbView3d::OnViewShowwaypointsRefresh()
+{
+	WbView::OnViewShowwaypoints();
+	invalObjectInView(nullptr);
+	Invalidate(false);
+}
+
+void WbView3d::OnViewShowpolygontriggersRefresh()
+{
+	WbView::OnViewShowpolygontriggers();
+	invalObjectInView(nullptr);
+	Invalidate(false);
 }
 
 void WbView3d::OnViewShowimpassableareas()

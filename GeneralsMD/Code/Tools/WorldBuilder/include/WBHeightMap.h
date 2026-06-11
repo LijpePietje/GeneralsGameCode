@@ -43,6 +43,9 @@ public:
 	void setDrawEntireMap(Bool entire) {m_drawEntireMap = entire;};
 	Bool getDrawEntireMap() {return m_drawEntireMap;};
 	void setFlattenHeights(Bool flat);
+	// TheSuperHackers @feature Nemellud 11/06/2026 EmbeddedMode: force a full terrain rebuild so a
+	// lighting change re-lights every vertex now (same path setFlattenHeights uses on a view toggle).
+	void forceRelight();
 
 protected:
 	void flattenHeights();

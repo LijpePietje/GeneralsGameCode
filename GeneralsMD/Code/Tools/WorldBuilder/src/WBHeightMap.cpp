@@ -76,6 +76,17 @@ void WBHeightMap::setFlattenHeights(Bool flat)
 	}
 }
 
+// TheSuperHackers @feature Nemellud 11/06/2026 EmbeddedMode: rebuild the whole terrain so a lighting
+// change re-lights every vertex immediately. This is the same updateBlock path setFlattenHeights runs
+// on a 2D/3D toggle (which is why toggling used to be the only way to see a lighting edit apply).
+void WBHeightMap::forceRelight()
+{
+#ifndef USE_FLAT_HEIGHT_MAP
+	m_needFullUpdate = true;
+	updateBlock(0, 0, m_x-1, m_y-1, m_map, nullptr);
+#endif
+}
+
 // THE_Z is just above the water plane, so the flattened terrain doesn't draw
 // under water.
 #define THE_Z (10)

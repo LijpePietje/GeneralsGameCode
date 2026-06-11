@@ -150,6 +150,8 @@ protected:
 	afx_msg void OnUpdateViewShowAmbientSounds(CCmdUI* pCmdUI);
   afx_msg void OnViewShowSoundCircles();
   afx_msg void OnUpdateViewShowSoundCircles(CCmdUI* pCmdUI);
+	afx_msg void OnViewShowwaypointsRefresh();
+	afx_msg void OnViewShowpolygontriggersRefresh();
   //}}AFX_MSG
 	DECLARE_MESSAGE_MAP()
 
@@ -260,6 +262,8 @@ public:
 	virtual void pitchCamera(Real delta) override;
 	bool getTopDownProjection(void) const { return m_projection; }
 	void setTopDownProjection(bool enable);
+	// TheSuperHackers @feature Nemellud 25/05/2026 EmbeddedMode: direct view access bypassing MDI state
+	static WbView3d* s_instance;
 	void setCameraPitch(Real absolutePitch);
 	Real getCameraPitch();
 	Real getCurrentZoom(); //WST 10/17/2002
@@ -279,6 +283,10 @@ public:
 	void resetRenderObjects();
 
 	void stepTimeOfDay();
+
+	// TheSuperHackers @feature Nemellud 11/06/2026 EmbeddedMode: force the terrain to re-light and
+	// repaint immediately after a pipe-driven lighting change (no 2D/3D toggle needed).
+	void refreshLightingNow();
 
 	void reset3dEngineDisplaySize(Int width, Int height); ///< Closes & reinitializes w3d.
 	void setLighting(const GlobalData::TerrainLighting *tl, Int whichLighting, Int whichLight=0);
