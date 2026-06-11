@@ -3529,8 +3529,14 @@ LRESULT CMainFrame::OnWbSetLighting(WPARAM wParam, LPARAM lParam)
 		changed = true;
 	}
 
-	if (changed)
+	if (changed) {
 		pView->setLighting(&tl, target, light);
+		// TheSuperHackers @bugfix Nemellud 11/06/2026 EmbeddedMode: setLighting only marks the window
+		// dirty; the terrain keeps its baked per-vertex lighting until the render objects are
+		// invalidated. Without this the change is invisible until the user toggles 2D/3D (which
+		// calls invalObjectInView via setTopDownProjection). Force the same refresh now.
+		pView->invalObjectInView(nullptr);
+	}
 
 	_snprintf(buf, maxLen, "{\"ok\":true}");
 	return 0;
@@ -3542,6 +3548,9 @@ LRESULT CMainFrame::OnWbResetLighting(WPARAM wParam, LPARAM lParam)
 	char* buf = (char*)lParam;
 	int maxLen = (int)wParam;
 	GlobalLightOptions::resetLightingToDefaults();
+	// Force the terrain to re-light immediately (see OnWbSetLighting note).
+	WbView3d* pView = CWorldBuilderDoc::GetActive3DView();
+	if (pView) pView->invalObjectInView(nullptr);
 	if (buf && maxLen > 16) _snprintf(buf, maxLen, "{\"ok\":true}");
 	return 0;
 }
