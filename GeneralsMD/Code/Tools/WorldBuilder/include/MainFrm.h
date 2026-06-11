@@ -235,6 +235,7 @@ protected:
 	afx_msg LRESULT OnWbSaveToPath(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbGetLighting(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbSetLighting(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbResetLighting(WPARAM wParam, LPARAM lParam);
 	DECLARE_MESSAGE_MAP()
 };
 

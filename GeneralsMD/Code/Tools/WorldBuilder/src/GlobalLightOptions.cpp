@@ -234,7 +234,10 @@ static void SpitLights()
 #endif
 }
 
-void GlobalLightOptions::OnResetLights()
+// TheSuperHackers @refactor Nemellud 10/06/2026 EmbeddedMode: extracted from OnResetLights so the
+// embedded-mode pipe (lighting_reset) can restore EA's factory defaults without a dialog instance.
+// Writes all four times of day for terrain + objects lighting and refreshes the active 3D view.
+void GlobalLightOptions::resetLightingToDefaults()
 {
 	TheWritableGlobalData->m_terrainLighting[1][0].ambient.red = 0.50f;
 	TheWritableGlobalData->m_terrainLighting[1][0].ambient.green = 0.39f;
@@ -477,6 +480,11 @@ void GlobalLightOptions::OnResetLights()
 		pView->setLighting(&TheGlobalData->m_terrainObjectsLighting[TheGlobalData->m_timeOfDay][K_ACCENT1], K_OBJECTS, K_ACCENT1);
 		pView->setLighting(&TheGlobalData->m_terrainObjectsLighting[TheGlobalData->m_timeOfDay][K_ACCENT2], K_OBJECTS, K_ACCENT2);
 	}
+}
+
+void GlobalLightOptions::OnResetLights()
+{
+	resetLightingToDefaults();
 	stuffValuesIntoFields(K_SUN);
 	stuffValuesIntoFields(K_ACCENT1);
 	stuffValuesIntoFields(K_ACCENT2);

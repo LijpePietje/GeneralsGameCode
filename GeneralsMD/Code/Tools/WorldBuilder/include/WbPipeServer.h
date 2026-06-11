@@ -160,6 +160,7 @@ private:
 // TheSuperHackers @feature Nemellud 10/06/2026 EmbeddedMode: global lighting via pipe
 #define WM_WB_GET_LIGHTING    (WM_USER + 200)  // sync: read global lighting state; wParam=bufLen, lParam=buf
 #define WM_WB_SET_LIGHTING    (WM_USER + 201)  // sync: set light colors/angles/timeOfDay; json in buf, result written back
+#define WM_WB_RESET_LIGHTING  (WM_USER + 202)  // sync: restore EA factory-default lighting for all times of day
 
 extern char g_wbSavePath[260];
 

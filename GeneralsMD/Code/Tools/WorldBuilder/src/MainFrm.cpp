@@ -167,6 +167,7 @@ BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
 	ON_MESSAGE(WM_WB_SAVE_TO_PATH,     OnWbSaveToPath)
 	ON_MESSAGE(WM_WB_GET_LIGHTING,     OnWbGetLighting)
 	ON_MESSAGE(WM_WB_SET_LIGHTING,     OnWbSetLighting)
+	ON_MESSAGE(WM_WB_RESET_LIGHTING,   OnWbResetLighting)
 END_MESSAGE_MAP()
 
 static UINT indicators[] =
@@ -3532,6 +3533,16 @@ LRESULT CMainFrame::OnWbSetLighting(WPARAM wParam, LPARAM lParam)
 		pView->setLighting(&tl, target, light);
 
 	_snprintf(buf, maxLen, "{\"ok\":true}");
+	return 0;
+}
+
+// TheSuperHackers @feature Nemellud 10/06/2026 EmbeddedMode: restore EA factory-default lighting.
+LRESULT CMainFrame::OnWbResetLighting(WPARAM wParam, LPARAM lParam)
+{
+	char* buf = (char*)lParam;
+	int maxLen = (int)wParam;
+	GlobalLightOptions::resetLightingToDefaults();
+	if (buf && maxLen > 16) _snprintf(buf, maxLen, "{\"ok\":true}");
 	return 0;
 }
 

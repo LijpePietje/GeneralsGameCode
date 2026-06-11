@@ -1128,6 +1128,11 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 		return true;
 	}
 
+	if (strcmp(cmd, "lighting_reset") == 0) {
+		SendMessage(hwnd, WM_WB_RESET_LIGHTING, (WPARAM)responseBufLen, (LPARAM)responseBuf);
+		return true;
+	}
+
 	if (strcmp(cmd, "sidelist_script_del") == 0) {
 		strncpy(responseBuf, json, responseBufLen - 1); responseBuf[responseBufLen - 1] = '\0';
 		SendMessage(hwnd, WM_WB_DEL_SCRIPT, (WPARAM)responseBufLen, (LPARAM)responseBuf);
