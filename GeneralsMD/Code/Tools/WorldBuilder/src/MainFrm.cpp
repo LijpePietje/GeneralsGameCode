@@ -2346,6 +2346,9 @@ static OrCondition* MF_ParseConditions(const char* json, int condCount)
 {
 	OrCondition* firstOr = nullptr;
 	OrCondition* lastOr  = nullptr;
+	// Per OR-groep (index 0..31): de OrCondition en de laatste AND-conditie erin.
+	OrCondition* grpOr[32]   = { nullptr };
+	Condition*   grpLast[32] = { nullptr };
 
 	for (int ci = 0; ci < condCount; ci++) {
 		char key[64];
@@ -2370,12 +2373,28 @@ static OrCondition* MF_ParseConditions(const char* json, int condCount)
 			if (p) MF_SetParam(p, vStr);
 		}
 
-		// Each condition gets its own OR clause (simple AND-of-ORs model for wizard)
-		OrCondition* orClause = newInstance(OrCondition);
-		orClause->setFirstAndCondition(cond);
-		if (!firstOr) firstOr = orClause;
-		if (lastOr)   lastOr->setNextOrCondition(orClause);
-		lastOr = orClause;
+		// TheSuperHackers @bugfix Nemellud 12/06/2026 EmbeddedMode: honor the per-condition OR-group
+		// (cond{i}_or). Conditions with the same group are AND-linked in one OrCondition; different
+		// groups become separate OrConditions (OR). Previously every condition got its own OR clause,
+		// so multi-condition AND (e.g. "all bosses destroyed") wrongly became OR ("any boss destroyed"),
+		// and the scripts modal's OR feature was ignored. Default group 0 → all conditions AND.
+		int orGroup = 0;
+		_snprintf(key, sizeof(key), "cond%d_or", ci);
+		MF_JsonGetInt(json, key, &orGroup);
+		if (orGroup < 0 || orGroup >= 32) orGroup = 0;
+
+		if (!grpOr[orGroup]) {
+			OrCondition* orClause = newInstance(OrCondition);
+			orClause->setFirstAndCondition(cond);
+			grpOr[orGroup]   = orClause;
+			grpLast[orGroup] = cond;
+			if (!firstOr) firstOr = orClause;
+			if (lastOr)   lastOr->setNextOrCondition(orClause);
+			lastOr = orClause;
+		} else {
+			grpLast[orGroup]->setNextCondition(cond);
+			grpLast[orGroup] = cond;
+		}
 	}
 	return firstOr;
 }
