@@ -750,6 +750,19 @@ LRESULT CMainFrame::OnWbSfGetState(WPARAM wParam, LPARAM lParam)
 	}
 	strncat(shapesJson, "]", sizeof(shapesJson) - strlen(shapesJson) - 1);
 
+	// TheSuperHackers @feature Nemellud 12/06/2026 ShapeFill: lijnen in de state voor de UI-lijst
+	char linesJson[1024] = "[";
+	bool firstL = true;
+	for (const auto& l : ShapeFillTool::getLines()) {
+		char entry[96];
+		_snprintf(entry, sizeof(entry), "%s{\"id\":%d,\"points\":%d}",
+		          firstL ? "" : ",", l.id, (int)l.points.size());
+		strncat(linesJson, entry, sizeof(linesJson) - strlen(linesJson) - 2);
+		firstL = false;
+	}
+	strncat(linesJson, "]", sizeof(linesJson) - strlen(linesJson) - 1);
+	int selLineId = ShapeFillTool::getSelectedLineId();
+
 	_snprintf(buf, len,
 		"{\"ok\":true,"
 		"\"innerHeight\":%d,\"borderWidth\":%d,"
@@ -760,7 +773,8 @@ LRESULT CMainFrame::OnWbSfGetState(WPARAM wParam, LPARAM lParam)
 		"\"innerAutoBlend\":%s,\"innerBlendInward\":%s,"
 		"\"autoSave\":%s,"
 		"\"mode\":\"%s\",\"isDrawingPoly\":%s,\"isDrawingLine\":%s,"
-		"\"selectedId\":%d,\"shapes\":%s}",
+		"\"selectedId\":%d,\"shapes\":%s,"
+		"\"selectedLineId\":%d,\"lines\":%s}",
 		innerH, bw,
 		innerTc, innerTexBuf,
 		borderTc, borderTexBuf,
@@ -774,7 +788,8 @@ LRESULT CMainFrame::OnWbSfGetState(WPARAM wParam, LPARAM lParam)
 		modeStr,
 		isDrawingPoly  ? "true" : "false",
 		isDrawingLine  ? "true" : "false",
-		selId, shapesJson);
+		selId, shapesJson,
+		selLineId, linesJson);
 	return 0;
 }
 
@@ -818,6 +833,13 @@ LRESULT CMainFrame::OnWbSfAction(WPARAM wParam, LPARAM /*lParam*/)
 			break;
 		case SF_ACT_DUPLICATE:
 			ShapeFillTool::copySelectedShape();
+			ShapeFillTool::pasteShape();
+			ShapeFillOptions::updateFromTool();
+			break;
+		case SF_ACT_COPY:
+			ShapeFillTool::copySelectedShape();
+			break;
+		case SF_ACT_PASTE:
 			ShapeFillTool::pasteShape();
 			ShapeFillOptions::updateFromTool();
 			break;
@@ -880,10 +902,16 @@ LRESULT CMainFrame::OnWbSfGetTexList(WPARAM wParam, LPARAM lParam)
 }
 
 // TheSuperHackers @feature Nemellud 25/05/2026 EmbeddedMode: select shape by id from pipe
-LRESULT CMainFrame::OnWbSfSelect(WPARAM wParam, LPARAM /*lParam*/)
+LRESULT CMainFrame::OnWbSfSelect(WPARAM wParam, LPARAM lParam)
 {
 	int id = (int)wParam;
-	ShapeFillTool::setSelectedId(id);
+	if (lParam == 1) {                       // lijn selecteren
+		ShapeFillTool::setSelectedId(-1);
+		ShapeFillTool::setSelectedLineId(id);
+	} else {                                 // shape selecteren
+		ShapeFillTool::setSelectedId(id);
+		ShapeFillTool::setSelectedLineId(-1);
+	}
 	ShapeFillTool::setMode(SF_SELECT);
 	ShapeFillOptions::updateFromTool();
 	CWorldBuilderView* p2D = CWorldBuilderDoc::GetActive2DView();

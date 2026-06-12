@@ -222,6 +222,9 @@ struct WbPlantGroveReq {
 #define SF_ACT_FINISH_LINE 7
 #define SF_ACT_CLEAR_LINES 8
 #define SF_ACT_ROTATE      9
+// TheSuperHackers @feature Nemellud 12/06/2026 ShapeFill: losse copy/paste voor Ctrl+C/Ctrl+V
+#define SF_ACT_COPY        10
+#define SF_ACT_PASTE       11
 
 // ── Brush property keys (WM_WB_BRUSH_SET wParam) ─────────────────────────────
 #define BRUSH_PROP_WIDTH   0

@@ -568,6 +568,8 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 		if      (strcmp(action, "apply")       == 0) act = SF_ACT_APPLY;
 		else if (strcmp(action, "delete")      == 0) act = SF_ACT_DELETE;
 		else if (strcmp(action, "duplicate")   == 0) act = SF_ACT_DUPLICATE;
+		else if (strcmp(action, "copy")        == 0) act = SF_ACT_COPY;
+		else if (strcmp(action, "paste")       == 0) act = SF_ACT_PASTE;
 		else if (strcmp(action, "flip_h")      == 0) act = SF_ACT_FLIP_H;
 		else if (strcmp(action, "flip_v")      == 0) act = SF_ACT_FLIP_V;
 		else if (strcmp(action, "finish_poly") == 0) act = SF_ACT_FINISH_POLY;
@@ -600,7 +602,11 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 	if (strcmp(cmd, "shapefill_select") == 0) {
 		int id = -1;
 		JsonGetInt(json, "id", &id);
-		PostMessage(hwnd, WM_WB_SF_SELECT, (WPARAM)id, 0);
+		// TheSuperHackers @feature Nemellud 12/06/2026 ShapeFill: kind:"line" selecteert een lijn i.p.v. shape
+		char kind[16] = "";
+		JsonGetStr(json, "kind", kind, sizeof(kind));
+		LPARAM isLine = (strcmp(kind, "line") == 0) ? 1 : 0;
+		PostMessage(hwnd, WM_WB_SF_SELECT, (WPARAM)id, isLine);
 		_snprintf(responseBuf, responseBufLen, "{\"ok\":true}");
 		return true;
 	}
