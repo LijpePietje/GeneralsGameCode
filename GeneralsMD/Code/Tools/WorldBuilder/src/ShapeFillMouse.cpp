@@ -170,6 +170,28 @@ void ShapeFillTool::mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWo
 			return;
 		}
 
+		// TheSuperHackers @feature Nemellud 13/06/2026 ShapeFill: klik overal OP de lijn (niet alleen
+		// de eindpunten) om hem te selecteren — punt-tot-segment afstand.
+		const Int SEG_HIT2 = 3 * 3;
+		for (Int li = 0; li < (Int)m_lines.size(); li++) {
+			const std::vector<ShapeVertex>& pts = m_lines[li].points;
+			for (Int pi = 0; pi + 1 < (Int)pts.size(); pi++) {
+				float ax = (float)pts[pi].tx,   ay = (float)pts[pi].ty;
+				float bx = (float)pts[pi+1].tx, by = (float)pts[pi+1].ty;
+				float abx = bx - ax, aby = by - ay;
+				float denom = abx*abx + aby*aby;
+				float t = denom ? ((cx - ax)*abx + (cy - ay)*aby) / denom : 0.f;
+				if (t < 0.f) t = 0.f; else if (t > 1.f) t = 1.f;
+				float ddx = cx - (ax + t*abx), ddy = cy - (ay + t*aby);
+				if (ddx*ddx + ddy*ddy <= (float)SEG_HIT2) {
+					m_selectedLineId = m_lines[li].id;
+					m_selectedId     = -1;
+					ShapeFillOptions::updateFromTool();
+					return;
+				}
+			}
+		}
+
 		// Check shape handles
 		ShapeHandle handle;
 		if (m_selectedId >= 0 && hitTestHandle(tx, ty, handle)) {
@@ -185,7 +207,8 @@ void ShapeFillTool::mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWo
 		// Check shape body for move/select
 		Int hitId = hitTestShape(tx, ty);
 		if (hitId >= 0) {
-			m_selectedId  = hitId;
+			m_selectedId     = hitId;
+			m_selectedLineId = -1;       // shape geselecteerd → lijn-selectie wissen
 			m_movingShape = true;
 			m_moveStartTx = tx;
 			m_moveStartTy = ty;
@@ -193,7 +216,8 @@ void ShapeFillTool::mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWo
 			m_hasDragSnapshot = true;
 			ShapeFillOptions::updateFromTool();
 		} else {
-			m_selectedId = -1;
+			m_selectedId     = -1;
+			m_selectedLineId = -1;       // leeg geklikt → alles deselecteren
 			ShapeFillOptions::updateFromTool();
 		}
 		return;
