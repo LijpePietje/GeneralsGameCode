@@ -2465,13 +2465,35 @@ static ScriptAction* MF_ParseActions(const char* json, int actCount, const char*
 
 // ── Handler implementations ───────────────────────────────────────────────────
 
+// TheSuperHackers @feature Nemellud 02/07/2026 EmbeddedMode: commit pipe-driven
+// SidesList mutations through WB's undo stack (same pattern as CTeamsDialog::OnOK),
+// so Ctrl+Z reverts player/team/script changes made via the REST API. Falls back
+// to a direct write when no document is active (should not happen in practice).
+static void MF_CommitSidesUndoable(SidesList& newSides)
+{
+	Bool modified = newSides.validateSides();
+	(void)modified;
+	CWorldBuilderDoc* pDoc = CWorldBuilderDoc::GetActiveDoc();
+	if (pDoc && pDoc->GetActive3DView()) {
+		SidesListUndoable* pUndo = new SidesListUndoable(newSides, pDoc);
+		pDoc->AddAndDoUndoable(pUndo);
+		REF_PTR_RELEASE(pUndo); // belongs to pDoc now.
+	} else {
+		*TheSidesList = newSides;
+	}
+}
+
+// TheSuperHackers @tweak Nemellud 02/07/2026 EmbeddedMode: mutate a copy of the
+// SidesList and commit via SidesListUndoable so the change is undoable (Ctrl+Z)
 LRESULT CMainFrame::OnWbSetPlayer(WPARAM, LPARAM lParam)
 {
 	char* json = (char*)lParam;
 	if (TheSidesList) {
 		char name[64] = "";
 		MF_JsonGetStr(json, "name", name, sizeof(name));
-		SidesInfo* side = TheSidesList->findSideInfo(AsciiString(name));
+		SidesList newSides;
+		newSides = *TheSidesList;
+		SidesInfo* side = newSides.findSideInfo(AsciiString(name));
 		if (side) {
 			Dict* d = side->getDict();
 			char sval[1024] = "";
@@ -2484,8 +2506,7 @@ LRESULT CMainFrame::OnWbSetPlayer(WPARAM, LPARAM lParam)
 			if (MF_JsonGetInt(json, "money", &ival))  d->setInt(TheKey_playerStartMoney, ival);
 			bool bIsHuman = false;
 			if (MF_JsonGetBool(json, "isHuman", &bIsHuman)) d->setBool(TheKey_playerIsHuman, bIsHuman ? TRUE : FALSE);
-			CWorldBuilderDoc* pDoc = (CWorldBuilderDoc*)GetActiveDocument();
-			if (pDoc) pDoc->updateAllViews();
+			MF_CommitSidesUndoable(newSides);
 		}
 	}
 	delete[] json;
@@ -2501,6 +2522,7 @@ LRESULT CMainFrame::OnWbAddPlayer(WPARAM, LPARAM lParam)
 		MF_JsonGetStr(json, "name",    name,    sizeof(name));
 		MF_JsonGetStr(json, "faction", faction, sizeof(faction));
 		if (name[0] && !TheSidesList->findSideInfo(AsciiString(name))) {
+			// TheSuperHackers @tweak Nemellud 02/07/2026 EmbeddedMode: undoable via SidesListUndoable
 			Dict d;
 			UnicodeString uName;
 			uName.translate(AsciiString(name));
@@ -2511,10 +2533,10 @@ LRESULT CMainFrame::OnWbAddPlayer(WPARAM, LPARAM lParam)
 			d.setInt          (TheKey_playerStartMoney,   10000);
 			d.setAsciiString  (TheKey_playerAllies,       AsciiString(""));
 			d.setAsciiString  (TheKey_playerEnemies,      AsciiString(""));
-			TheSidesList->addSide(&d);
-			TheSidesList->validateSides();
-			CWorldBuilderDoc* pDoc = (CWorldBuilderDoc*)GetActiveDocument();
-			if (pDoc) pDoc->updateAllViews();
+			SidesList newSides;
+			newSides = *TheSidesList;
+			newSides.addSide(&d);
+			MF_CommitSidesUndoable(newSides);
 		}
 	}
 	delete[] json;
@@ -2529,17 +2551,18 @@ LRESULT CMainFrame::OnWbDelPlayer(WPARAM, LPARAM lParam)
 		char name[64] = "";
 		MF_JsonGetStr(json, "name", name, sizeof(name));
 		if (name[0]) {
-			int numSides = TheSidesList->getNumSides();
+			// TheSuperHackers @tweak Nemellud 02/07/2026 EmbeddedMode: undoable via SidesListUndoable
+			SidesList newSides;
+			newSides = *TheSidesList;
+			int numSides = newSides.getNumSides();
 			for (int i = 0; i < numSides; i++) {
-				SidesInfo* si = TheSidesList->getSideInfo(i);
+				SidesInfo* si = newSides.getSideInfo(i);
 				if (!si) continue;
 				Bool exists = FALSE;
 				AsciiString sName = si->getDict()->getAsciiString(TheKey_playerName, &exists);
 				if (exists && sName == AsciiString(name)) {
-					TheSidesList->removeSide(i);
-					TheSidesList->validateSides();
-					CWorldBuilderDoc* pDoc = (CWorldBuilderDoc*)GetActiveDocument();
-					if (pDoc) pDoc->updateAllViews();
+					newSides.removeSide(i);
+					MF_CommitSidesUndoable(newSides);
 					break;
 				}
 			}
@@ -2753,9 +2776,12 @@ LRESULT CMainFrame::OnWbSetTeam(WPARAM, LPARAM lParam)
 	MF_JsonGetInt(json, "maxInstances", &maxInst);
 	if (!name[0]) { delete[] json; return 0; }
 
+	// TheSuperHackers @tweak Nemellud 02/07/2026 EmbeddedMode: undoable via SidesListUndoable
+	SidesList newSides;
+	newSides = *TheSidesList;
 	Int idx = -1;
 	Bool exists = FALSE;
-	TeamsInfo* existing = TheSidesList->findTeamInfo(AsciiString(name), &idx);
+	TeamsInfo* existing = newSides.findTeamInfo(AsciiString(name), &idx);
 
 	Dict newDict;
 	newDict.setAsciiString(TheKey_teamName,         AsciiString(name));
@@ -2892,11 +2918,10 @@ LRESULT CMainFrame::OnWbSetTeam(WPARAM, LPARAM lParam)
 	if (existing) {
 		*existing->getDict() = newDict;
 	} else {
-		TheSidesList->addTeam(&newDict);
+		newSides.addTeam(&newDict);
 	}
 
-	CWorldBuilderDoc* pDoc = (CWorldBuilderDoc*)GetActiveDocument();
-	if (pDoc) pDoc->updateAllViews();
+	MF_CommitSidesUndoable(newSides);
 	delete[] json;
 	return 0;
 }
@@ -2904,16 +2929,18 @@ LRESULT CMainFrame::OnWbSetTeam(WPARAM, LPARAM lParam)
 LRESULT CMainFrame::OnWbDelTeam(WPARAM, LPARAM lParam)
 {
 	// TheSuperHackers @feature Nemellud 30/05/2026 EmbeddedMode: delete team via pipe
+	// TheSuperHackers @tweak Nemellud 02/07/2026 EmbeddedMode: undoable via SidesListUndoable
 	char* json = (char*)lParam;
 	if (TheSidesList) {
 		char name[128] = "";
 		MF_JsonGetStr(json, "name", name, sizeof(name));
+		SidesList newSides;
+		newSides = *TheSidesList;
 		Int idx = -1;
-		TheSidesList->findTeamInfo(AsciiString(name), &idx);
+		newSides.findTeamInfo(AsciiString(name), &idx);
 		if (idx >= 0) {
-			TheSidesList->removeTeam(idx);
-			CWorldBuilderDoc* pDoc = (CWorldBuilderDoc*)GetActiveDocument();
-			if (pDoc) pDoc->updateAllViews();
+			newSides.removeTeam(idx);
+			MF_CommitSidesUndoable(newSides);
 		}
 	}
 	delete[] json;
@@ -2936,11 +2963,14 @@ LRESULT CMainFrame::OnWbSetScript(WPARAM wParam, LPARAM lParam)
 	// Default group name to script name if not specified
 	if (!groupName[0]) _snprintf(groupName, sizeof(groupName), "%s", scriptName);
 
-	SidesInfo* side = TheSidesList->findSideInfo(AsciiString(playerName));
+	// TheSuperHackers @tweak Nemellud 02/07/2026 EmbeddedMode: undoable via SidesListUndoable
+	SidesList newSides;
+	newSides = *TheSidesList;
+	SidesInfo* side = newSides.findSideInfo(AsciiString(playerName));
 	// Fallback: empty/unknown name → first player
 	if (!side) {
-		int n = TheSidesList->getNumSides();
-		for (int i = 0; i < n; i++) { SidesInfo* s = TheSidesList->getSideInfo(i); if (s) { side = s; break; } }
+		int n = newSides.getNumSides();
+		for (int i = 0; i < n; i++) { SidesInfo* s = newSides.getSideInfo(i); if (s) { side = s; break; } }
 	}
 	if (!side) { if (bufLen > 0) _snprintf(buf, bufLen, "{\"ok\":false,\"error\":\"no player\"}"); return 0; }
 
@@ -3001,8 +3031,7 @@ LRESULT CMainFrame::OnWbSetScript(WPARAM wParam, LPARAM lParam)
 
 	if (isNew) group->addScript(script, 0);
 
-	CWorldBuilderDoc* pDoc = (CWorldBuilderDoc*)GetActiveDocument();
-	if (pDoc) pDoc->updateAllViews();
+	MF_CommitSidesUndoable(newSides);
 
 	if (bufLen > 0) _snprintf(buf, bufLen, "{\"ok\":true}");
 	return 0;
@@ -3021,10 +3050,13 @@ LRESULT CMainFrame::OnWbDelScript(WPARAM wParam, LPARAM lParam)
 		MF_JsonGetStr(buf, "group",  groupName,  sizeof(groupName));
 		MF_JsonGetStr(buf, "name",   scriptName, sizeof(scriptName));
 
-		SidesInfo* side = TheSidesList->findSideInfo(AsciiString(playerName));
+		// TheSuperHackers @tweak Nemellud 02/07/2026 EmbeddedMode: undoable via SidesListUndoable
+		SidesList newSides;
+		newSides = *TheSidesList;
+		SidesInfo* side = newSides.findSideInfo(AsciiString(playerName));
 		if (!side) {
-			int n = TheSidesList->getNumSides();
-			for (int i = 0; i < n; i++) { SidesInfo* s = TheSidesList->getSideInfo(i); if (s) { side = s; break; } }
+			int n = newSides.getNumSides();
+			for (int i = 0; i < n; i++) { SidesInfo* s = newSides.getSideInfo(i); if (s) { side = s; break; } }
 		}
 		if (side) {
 			ScriptList* sl = side->getScriptList();
@@ -3042,8 +3074,7 @@ LRESULT CMainFrame::OnWbDelScript(WPARAM wParam, LPARAM lParam)
 				}
 			}
 		}
-		CWorldBuilderDoc* pDoc = (CWorldBuilderDoc*)GetActiveDocument();
-		if (pDoc) pDoc->updateAllViews();
+		if (ok) MF_CommitSidesUndoable(newSides);
 	}
 	if (bufLen > 0) _snprintf(buf, bufLen, "{\"ok\":%s}", ok ? "true" : "false");
 	return 0;
@@ -3064,12 +3095,15 @@ LRESULT CMainFrame::OnWbSetGroup(WPARAM wParam, LPARAM lParam)
 		MF_JsonGetBool(buf, "active",     &active);
 		MF_JsonGetBool(buf, "subroutine", &subroutine);
 
-		SidesInfo* side = TheSidesList->findSideInfo(AsciiString(playerName));
+		// TheSuperHackers @tweak Nemellud 02/07/2026 EmbeddedMode: undoable via SidesListUndoable
+		SidesList newSides;
+		newSides = *TheSidesList;
+		SidesInfo* side = newSides.findSideInfo(AsciiString(playerName));
 		// Fallback: if not found (e.g. empty name = neutral player), use first side
 		if (!side) {
-			int n = TheSidesList->getNumSides();
+			int n = newSides.getNumSides();
 			for (int i = 0; i < n; i++) {
-				SidesInfo* s = TheSidesList->getSideInfo(i);
+				SidesInfo* s = newSides.getSideInfo(i);
 				if (s) { side = s; break; }
 			}
 		}
@@ -3091,8 +3125,7 @@ LRESULT CMainFrame::OnWbSetGroup(WPARAM wParam, LPARAM lParam)
 				ok = true;
 			}
 		}
-		CWorldBuilderDoc* pDoc = (CWorldBuilderDoc*)GetActiveDocument();
-		if (pDoc) pDoc->updateAllViews();
+		if (ok) MF_CommitSidesUndoable(newSides);
 	}
 	if (bufLen > 0) _snprintf(buf, bufLen, "{\"ok\":%s}", ok ? "true" : "false");
 	return 0;
@@ -3126,11 +3159,14 @@ LRESULT CMainFrame::OnWbAddSkirmish(WPARAM wParam, LPARAM lParam)
 		{ "FactionGLAStealthGeneral",         "SkirmishGLAStealthGeneral"      },
 	};
 
+	// TheSuperHackers @tweak Nemellud 02/07/2026 EmbeddedMode: undoable via SidesListUndoable
+	SidesList newSides;
+	newSides = *TheSidesList;
 	int added = 0;
 	for (int i = 0; i < (int)(sizeof(SKIRMISH_PLAYERS) / sizeof(SKIRMISH_PLAYERS[0])); i++) {
 		const char* pName    = SKIRMISH_PLAYERS[i].name;
 		const char* pFaction = SKIRMISH_PLAYERS[i].faction;
-		if (TheSidesList->findSideInfo(AsciiString(pName))) continue;
+		if (newSides.findSideInfo(AsciiString(pName))) continue;
 
 		Dict d;
 		UnicodeString uName;
@@ -3141,14 +3177,16 @@ LRESULT CMainFrame::OnWbAddSkirmish(WPARAM wParam, LPARAM lParam)
 		d.setAsciiString  (TheKey_playerFaction,     AsciiString(pFaction));
 		d.setAsciiString  (TheKey_playerEnemies,     AsciiString(""));
 		d.setAsciiString  (TheKey_playerAllies,      AsciiString(""));
-		TheSidesList->addSide(&d);
+		newSides.addSide(&d);
 		added++;
 	}
 
-	TheSidesList->validateSides();
-
-	CWorldBuilderDoc* pDoc = (CWorldBuilderDoc*)GetActiveDocument();
-	if (pDoc) pDoc->updateAllViews();
+	// Commit when players were added, or when validateSides had repairs to apply
+	// (the old code always ran validateSides on TheSidesList directly)
+	Bool fixed = newSides.validateSides();
+	if (added > 0 || fixed) {
+		MF_CommitSidesUndoable(newSides);
+	}
 
 	if (responseBuf)
 		_snprintf(responseBuf, responseBufLen, "{\"ok\":true,\"added\":%d}", added);
