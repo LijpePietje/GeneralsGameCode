@@ -467,6 +467,17 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 		return true;
 	}
 
+	// TheSuperHackers @feature Nemellud 03/07/2026 EmbeddedMode: absolute get/set of the
+	// impassable-areas overlay. Unlike view_toggle (blind WM_COMMAND flip) this reports
+	// the actual engine state, so the Electron UI can resync after a refresh.
+	if (strcmp(cmd, "impassable_view") == 0) {
+		int state = -1;  // -1 = query only
+		JsonGetInt(json, "state", &state);
+		int cur = (int)SendMessage(hwnd, WM_WB_IMPASSABLE_VIEW, (WPARAM)state, 0);
+		_snprintf(responseBuf, responseBufLen, "{\"ok\":true,\"state\":%d}", cur);
+		return true;
+	}
+
 	if (strcmp(cmd, "edit") == 0) {
 		char op[64] = "";
 		JsonGetStr(json, "op", op, sizeof(op));

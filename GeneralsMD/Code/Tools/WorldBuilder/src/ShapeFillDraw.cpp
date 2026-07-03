@@ -340,6 +340,10 @@ void ShapeFillTool::drawCoordLabel(CDC* pDC, Int sx, Int sy, Int tx, Int ty)
 
 void ShapeFillTool::drawOverlayStatic(CDC* /*pDC_unused*/, WbView* pView)
 {
+	// TheSuperHackers @tweak Nemellud 03/07/2026 ShapeFillTool: only draw the shapes
+	// overlay while the ShapeFill tool itself is active — other tools/tabs keep a
+	// clean viewport and avoid GDI-over-D3D flicker from unrelated repaints.
+	if (!m_isActive) return;
 	if (m_shapes.empty() && !m_hasDraft && !m_polyDrawing && m_lines.empty() && !m_lineDrawing && !m_hasSnapCorner) return;
 
 	// Only draw in top-down projection — shapes are defined on a flat plane

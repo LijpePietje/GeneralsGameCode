@@ -168,6 +168,7 @@ BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
 	ON_MESSAGE(WM_WB_GET_LIGHTING,     OnWbGetLighting)
 	ON_MESSAGE(WM_WB_SET_LIGHTING,     OnWbSetLighting)
 	ON_MESSAGE(WM_WB_RESET_LIGHTING,   OnWbResetLighting)
+	ON_MESSAGE(WM_WB_IMPASSABLE_VIEW,  OnWbImpassableView)
 END_MESSAGE_MAP()
 
 static UINT indicators[] =
@@ -2029,6 +2030,28 @@ LRESULT CMainFrame::OnWbRotateSelected(WPARAM, LPARAM)
 	}
 	if (count > 0) pDoc->updateAllViews();
 	return count;
+}
+
+// TheSuperHackers @feature Nemellud 03/07/2026 EmbeddedMode: absolute get/set of the
+// impassable-areas overlay. wParam: -1 = query only, 0 = off, 1 = on. Returns actual
+// state (0/1) so the Electron UI can resync after a renderer refresh.
+LRESULT CMainFrame::OnWbImpassableView(WPARAM wParam, LPARAM)
+{
+	if (!TheTerrainRenderObject) return 0;
+	Bool cur = TheTerrainRenderObject->getShowImpassableAreas();
+	int want = (int)wParam;
+	if (want >= 0 && ((want != 0) != (cur != 0))) {
+		TheTerrainRenderObject->setShowImpassableAreas(want != 0);
+		cur = (want != 0);
+		WbView3d* p3View = WbView3d::s_instance;
+		CWorldBuilderDoc* pDoc = (CWorldBuilderDoc*)GetActiveDocument();
+		if (p3View && pDoc) {
+			// Force the entire terrain mesh to be rerendered (same as the menu handler)
+			IRegion2D range = {0,0,0,0};
+			p3View->updateHeightMapInView(pDoc->GetHeightMap(), false, range);
+		}
+	}
+	return cur ? 1 : 0;
 }
 
 // ── Tier J — SidesList wizard ─────────────────────────────────────────────────

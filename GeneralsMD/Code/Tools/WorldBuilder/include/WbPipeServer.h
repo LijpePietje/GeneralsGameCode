@@ -161,6 +161,8 @@ private:
 #define WM_WB_GET_LIGHTING    (WM_USER + 200)  // sync: read global lighting state; wParam=bufLen, lParam=buf
 #define WM_WB_SET_LIGHTING    (WM_USER + 201)  // sync: set light colors/angles/timeOfDay; json in buf, result written back
 #define WM_WB_RESET_LIGHTING  (WM_USER + 202)  // sync: restore EA factory-default lighting for all times of day
+// TheSuperHackers @feature Nemellud 03/07/2026 EmbeddedMode: absolute get/set of impassable-areas overlay
+#define WM_WB_IMPASSABLE_VIEW (WM_USER + 203)  // sync: wParam=-1 query / 0 off / 1 on; returns state 0/1
 
 extern char g_wbSavePath[260];
 
