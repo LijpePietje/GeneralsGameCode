@@ -99,6 +99,8 @@ public:
 public: // overridden
 	virtual BOOL DoSave(LPCTSTR lpszPathName, BOOL bReplace = TRUE) override;
 	virtual BOOL DoFileSave() override;
+	// TheSuperHackers @feature Nemellud 10/06/2026 EmbeddedMode: save to explicit path without dialog
+	BOOL SaveToPath(LPCTSTR path) { return DoSave(path, TRUE); }
 
 // Attributes
 public:
@@ -170,6 +172,7 @@ public:
 	virtual void Dump(CDumpContext& dc) const override;
 #endif
 	void AddAndDoUndoable(Undoable *pUndo);
+	void ResizeFromPipe(); // TheSuperHackers @feature Nemellud 06/06/2026 EmbeddedMode: resize via pipe (no dialog)
 // Generated message map functions
 protected:
 	//{{AFX_MSG(CWorldBuilderDoc)

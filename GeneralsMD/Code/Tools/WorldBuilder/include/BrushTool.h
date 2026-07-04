@@ -51,6 +51,9 @@ public:
 	static void setWidth(Int width);
 	static void setFeather(Int feather);
 	static void setHeight(Int height);
+	// TheSuperHackers @feature Nemellud 25/05/2026 EmbeddedMode: pipe-accessible square/round toggle
+	static void setShape(Bool square) { m_brushSquare = square; }
+	static Bool getShape() { return m_brushSquare; }
 
 public:
 	virtual void mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWorldBuilderDoc *pDoc) override;

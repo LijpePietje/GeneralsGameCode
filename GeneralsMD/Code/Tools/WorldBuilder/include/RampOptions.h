@@ -52,6 +52,8 @@ class RampOptions : public COptionsPanel
 
 		Bool shouldApplyTheRamp();
 		Real getRampWidth() { return m_rampWidth; }
+		// TheSuperHackers @feature Nemellud 25/05/2026 EmbeddedMode: pipe-accessible ramp width setter
+		void setRampWidth(Real w) { m_rampWidth = w; }
 
 		afx_msg void OnApply();
 		afx_msg void OnWidthChange();

@@ -238,6 +238,50 @@ void ShapeFillTool::finishPolygon()
 // Apply to terrain
 // -------------------------------------------------------------------------
 
+// ShapeFillApplyUndoable — declared in ShapeFillTool.h; implementations here.
+
+ShapeFillApplyUndoable::ShapeFillApplyUndoable(CWorldBuilderDoc* pDoc,
+	WorldHeightMapEdit* before, WorldHeightMapEdit* after, IRegion2D range)
+	: m_pDoc(pDoc), m_pBefore(nullptr), m_pAfter(nullptr), m_range(range)
+{
+	REF_PTR_SET(m_pBefore, before);
+	REF_PTR_SET(m_pAfter,  after);
+}
+
+ShapeFillApplyUndoable::~ShapeFillApplyUndoable()
+{
+	REF_PTR_RELEASE(m_pBefore);
+	REF_PTR_RELEASE(m_pAfter);
+}
+
+void ShapeFillApplyUndoable::Do()
+{
+	m_pDoc->SetHeightMap(m_pAfter, false); // view already rendered — just register officially
+}
+
+void ShapeFillApplyUndoable::Undo()
+{
+	m_pBefore->resetResources();
+	m_pBefore->getTerrainTexture();
+	m_pDoc->SetHeightMap(m_pBefore, true);
+}
+
+void ShapeFillApplyUndoable::Redo()
+{
+	m_pAfter->resetResources();
+	m_pAfter->getTerrainTexture();
+	m_pDoc->SetHeightMap(m_pAfter, true);
+}
+
+// TheSuperHackers @feature Nemellud 25/05/2026 EmbeddedMode: add shape programmatically from pipe
+Int ShapeFillTool::addShape(ShapeDef def)
+{
+	def.id = m_nextId++;
+	m_shapes.push_back(def);
+	m_selectedId = def.id;
+	return def.id;
+}
+
 // TheSuperHackers @feature Nemellud 10/05/2026 ShapeFillTool: apply shape to heightmap with
 // inner/border textures and three independent blend groups (outer, inner, fill).
 void ShapeFillTool::applySelectedShape(CWorldBuilderDoc* pDoc)
@@ -246,16 +290,20 @@ void ShapeFillTool::applySelectedShape(CWorldBuilderDoc* pDoc)
 	ShapeDef* shape = findShape(m_selectedId);
 	if (!shape) return;
 
+	AfxGetApp()->BeginWaitCursor(); // show hourglass while apply is running
+
 	shape->innerHeight    = m_innerHeight;
 	shape->autoBlendOuter = m_autoBlend;
 	shape->borderWidth    = m_borderWidth;
 	shape->innerTexClass  = m_innerTexClass;
 	shape->borderTexClass = m_borderTexClass;
 
-	WorldHeightMapEdit* htMapCopy = pDoc->GetHeightMap()->duplicate();
-	Int border = htMapCopy->getBorderSize();
-	Int mapW   = htMapCopy->getXExtent();
-	Int mapH   = htMapCopy->getYExtent();
+	// Modify the live heightmap in-place so partial updateHeightMap (same pointer) works.
+	WorldHeightMapEdit* pHM      = pDoc->GetHeightMap();
+	WorldHeightMapEdit* htBefore = pHM->duplicate(); // pre-apply snapshot for Undo
+	Int border = pHM->getBorderSize();
+	Int mapW   = pHM->getXExtent();
+	Int mapH   = pHM->getYExtent();
 	TileSet tiles = rasterize(*shape);
 	Bool needsOptimize = false;
 
@@ -263,14 +311,31 @@ void ShapeFillTool::applySelectedShape(CWorldBuilderDoc* pDoc)
 	Int borderTex = (shape->borderTexClass >= 0) ? shape->borderTexClass : shape->innerTexClass;
 	Int innerTex  = (shape->innerTexClass   >= 0) ? shape->innerTexClass  : borderTex;
 
+	// Bounding box of modified tiles for partial render update
+	Int rMinX = mapW, rMinY = mapH, rMaxX = 0, rMaxY = 0;
+	for (const CPoint& pt : tiles.inner) {
+		Int hx = pt.x + border, hy = pt.y + border;
+		if (hx >= 0 && hy >= 0 && hx < mapW && hy < mapH) {
+			if (hx < rMinX) rMinX = hx; if (hx > rMaxX) rMaxX = hx;
+			if (hy < rMinY) rMinY = hy; if (hy > rMaxY) rMaxY = hy;
+		}
+	}
+	for (const BorderTile& bt : tiles.border) {
+		Int hx = bt.pt.x + border, hy = bt.pt.y + border;
+		if (hx >= 0 && hy >= 0 && hx < mapW && hy < mapH) {
+			if (hx < rMinX) rMinX = hx; if (hx > rMaxX) rMaxX = hx;
+			if (hy < rMinY) rMinY = hy; if (hy > rMaxY) rMaxY = hy;
+		}
+	}
+
 	// Apply inner zone
 	for (const CPoint& pt : tiles.inner) {
 		Int hx = pt.x + border, hy = pt.y + border;
 		if (hx < 0 || hy < 0 || hx >= mapW || hy >= mapH) continue;
-		if (htMapCopy->getHeight(hx, hy) != (UnsignedByte)shape->innerHeight)
-			htMapCopy->setHeight(hx, hy, (UnsignedByte)shape->innerHeight);
+		if (pHM->getHeight(hx, hy) != (UnsignedByte)shape->innerHeight)
+			pHM->setHeight(hx, hy, (UnsignedByte)shape->innerHeight);
 		if (innerTex >= 0)
-			if (htMapCopy->setTileNdx(hx, hy, innerTex, false))
+			if (pHM->setTileNdx(hx, hy, innerTex, false))
 				needsOptimize = true;
 	}
 
@@ -282,6 +347,7 @@ void ShapeFillTool::applySelectedShape(CWorldBuilderDoc* pDoc)
 
 	// For autoBlendOuter: sample terrain just OUTSIDE the shape boundary so
 	// the reference height is stable across multiple Apply calls (idempotent).
+	// Outer tiles are never in tiles.inner/border, so reading from pHM is safe.
 	auto sampleOuterTerrain = [&](Int tx, Int ty) -> Int {
 		Int ox = tx, oy = ty;
 		if (shape->type == SHAPE_RECT) {
@@ -327,21 +393,21 @@ void ShapeFillTool::applySelectedShape(CWorldBuilderDoc* pDoc)
 		}
 		Int hx = std::max(0, std::min(mapW - 1, ox + border));
 		Int hy = std::max(0, std::min(mapH - 1, oy + border));
-		return (Int)htMapCopy->getHeight(hx, hy);
+		return (Int)pHM->getHeight(hx, hy);
 	};
 
 	for (const BorderTile& bt : tiles.border) {
 		Int hx = bt.pt.x + border, hy = bt.pt.y + border;
 		if (hx < 0 || hy < 0 || hx >= mapW || hy >= mapH) continue;
 		float t = hasInnerPoly ? bt.dist : std::max(0.0f, std::min(1.0f, bt.dist / bwf));
-		Int existingH = htMapCopy->getHeight(hx, hy);
+		Int existingH = pHM->getHeight(hx, hy);
 		Int outerH = sampleOuterTerrain(bt.pt.x, bt.pt.y);
 		Int h = (Int)(outerH + t * (shape->innerHeight - outerH));
 		h = std::max(0, std::min(80, h));
 		if (existingH != h)
-			htMapCopy->setHeight(hx, hy, (UnsignedByte)h);
+			pHM->setHeight(hx, hy, (UnsignedByte)h);
 		if (borderTex >= 0)
-			if (htMapCopy->setTileNdx(hx, hy, borderTex, false))
+			if (pHM->setTileNdx(hx, hy, borderTex, false))
 				needsOptimize = true;
 	}
 
@@ -362,83 +428,107 @@ void ShapeFillTool::applySelectedShape(CWorldBuilderDoc* pDoc)
 			isBorderTile[hy * mapW + hx] = true;
 	}
 
-	// --- Outer boundary blend ---
-	// TheSuperHackers @fix Nemellud 10/05/2026 ShapeFillTool: autoBlendOut propagates through all
-	// connected same-texture tiles via optimizeTiles(); only safe to call on exterior terrain tiles.
+	// --- Inner boundary blend "Out" (before optimizeTiles) ---
+	// autoBlendOut on inner (rocks) tiles: flood-fill stays within inner zone, no side effects.
+	// Result: cliff tiles at inner edge show rocks bleeding in.
+	if (m_innerAutoBlend && !m_innerBlendInward && innerTex >= 0 && !tiles.border.empty()) {
+		for (const CPoint& pt : tiles.inner) {
+			Int hx = pt.x + border, hy = pt.y + border;
+			if (hx < 0 || hy < 0 || hx >= mapW || hy >= mapH) continue;
+			bool adjToBorder = false;
+			for (Int d = 0; d < 4 && !adjToBorder; d++) {
+				Int nx = hx + dx4[d], ny = hy + dy4[d];
+				if (nx >= 0 && ny >= 0 && nx < mapW && ny < mapH && isBorderTile[ny * mapW + nx])
+					adjToBorder = true;
+			}
+			if (!adjToBorder) continue;
+			pHM->autoBlendOut(hx, hy);
+		}
+		needsOptimize = true;
+	}
+
+	// Bake texture changes + inner "Out" before per-tile blend operations.
+	if (needsOptimize)
+		pHM->optimizeTiles();
+
+	// --- Inner boundary blend "In" (after optimizeTiles, per-tile via blendTile, no flood-fill) ---
+	// blendTile(rocks_tile, adjacent_cliff_tile): rocks show cliff bleeding in.
+	// Unlike autoBlendOut(cliff), this targets only the inner boundary — no outer side effects.
+	if (m_innerAutoBlend && m_innerBlendInward && innerTex >= 0 && borderTex >= 0 && !tiles.border.empty()) {
+		for (const CPoint& pt : tiles.inner) {
+			Int hx = pt.x + border, hy = pt.y + border;
+			if (hx < 0 || hy < 0 || hx >= mapW || hy >= mapH) continue;
+			Int bx = -1, by = -1;
+			for (Int d = 0; d < 4 && bx < 0; d++) {
+				Int nx = hx + dx4[d], ny = hy + dy4[d];
+				if (nx < 0 || ny < 0 || nx >= mapW || ny >= mapH) continue;
+				if (isBorderTile[ny * mapW + nx]) { bx = nx; by = ny; }
+			}
+			if (bx < 0) continue;
+			pHM->blendTile(hx, hy, bx, by, -1, -1);
+		}
+	}
+
+	// --- Outer boundary blend (after optimizeTiles, per-tile via blendTile, no flood-fill) ---
+	// Out: blendTile(exterior_tile, adjacent_cliff_tile) -> exterior shows cliff bleeding in.
+	// In:  blendTile(cliff_tile, adjacent_exterior_tile) -> cliff shows exterior bleeding in.
 	if (shape->autoBlendOuter && borderTex >= 0) {
-		// With free inner poly: dist is [0,1], blend only the outer 30% of the border.
-		// With uniform border: dist is tile count, blend within 2 tiles of the outer edge.
 		float blendThresh = hasInnerPoly ? 0.3f : 2.0f;
 		std::vector<bool> inShape(mapW * mapH, false);
 		for (Int i = 0; i < mapW * mapH; i++)
 			inShape[i] = isInnerTile[i] || isBorderTile[i];
 		std::vector<bool> done(mapW * mapH, false);
-		for (const BorderTile& bt : tiles.border) {
-			if (bt.dist >= blendThresh) continue;
-			for (Int d = 0; d < 4; d++) {
-				Int hx = bt.pt.x + border + dx4[d];
-				Int hy = bt.pt.y + border + dy4[d];
-				if (hx < 0 || hy < 0 || hx >= mapW || hy >= mapH) continue;
-				if (inShape[hy * mapW + hx]) continue;
-				if (done[hy * mapW + hx]) continue;
-				done[hy * mapW + hx] = true;
-				if (!m_blendInward) {
-					if (htMapCopy->setTileNdx(hx, hy, borderTex, false))
-						needsOptimize = true;
-				} else {
-					htMapCopy->autoBlendOut(hx, hy);
-				}
-			}
-		}
-	}
-
-	// --- Inner boundary blend ---
-	if (m_innerAutoBlend && innerTex >= 0 && !tiles.border.empty()) {
-		if (!m_innerBlendInward) {
-			// Out: autoBlendOut on inner zone tiles adjacent to border → inner tex bleeds toward border
-			for (const CPoint& pt : tiles.inner) {
-				Int hx = pt.x + border, hy = pt.y + border;
-				if (hx < 0 || hy < 0 || hx >= mapW || hy >= mapH) continue;
-				bool adjToBorder = false;
-				for (Int d = 0; d < 4 && !adjToBorder; d++) {
-					Int nx = hx + dx4[d], ny = hy + dy4[d];
-					if (nx >= 0 && ny >= 0 && nx < mapW && ny < mapH && isBorderTile[ny * mapW + nx])
-						adjToBorder = true;
-				}
-				if (!adjToBorder) continue;
-				htMapCopy->autoBlendOut(hx, hy);
-			}
-			needsOptimize = true;
-		} else {
-			// In: autoBlendOut on border tiles adjacent to inner zone → border tex bleeds into inner zone
-			std::vector<bool> doneBlend2(mapW * mapH, false);
+		if (!m_blendInward) {
 			for (const BorderTile& bt : tiles.border) {
+				if (bt.dist >= blendThresh) continue;
+				Int bhx = bt.pt.x + border, bhy = bt.pt.y + border;
+				for (Int d = 0; d < 4; d++) {
+					Int hx = bhx + dx4[d], hy = bhy + dy4[d];
+					if (hx < 0 || hy < 0 || hx >= mapW || hy >= mapH) continue;
+					if (inShape[hy * mapW + hx]) continue;
+					if (done[hy * mapW + hx]) continue;
+					done[hy * mapW + hx] = true;
+					pHM->blendTile(hx, hy, bhx, bhy, -1, -1);
+				}
+			}
+		} else {
+			for (const BorderTile& bt : tiles.border) {
+				if (bt.dist >= blendThresh) continue;
 				Int hx = bt.pt.x + border, hy = bt.pt.y + border;
 				if (hx < 0 || hy < 0 || hx >= mapW || hy >= mapH) continue;
-				bool adjToInner = false;
-				for (Int d = 0; d < 4 && !adjToInner; d++) {
+				if (done[hy * mapW + hx]) continue;
+				done[hy * mapW + hx] = true;
+				Int ex = -1, ey = -1;
+				for (Int d = 0; d < 4 && ex < 0; d++) {
 					Int nx = hx + dx4[d], ny = hy + dy4[d];
-					if (nx >= 0 && ny >= 0 && nx < mapW && ny < mapH && isInnerTile[ny * mapW + nx])
-						adjToInner = true;
+					if (nx < 0 || ny < 0 || nx >= mapW || ny >= mapH) continue;
+					if (!inShape[ny * mapW + nx]) { ex = nx; ey = ny; }
 				}
-				if (!adjToInner) continue;
-				if (doneBlend2[hy * mapW + hx]) continue;
-				doneBlend2[hy * mapW + hx] = true;
-				htMapCopy->autoBlendOut(hx, hy);
+				if (ex >= 0)
+					pHM->blendTile(hx, hy, ex, ey, -1, -1);
 			}
-			needsOptimize = true;
 		}
 	}
 
+	// After optimizeTiles(), m_terrainTex is freed — partial update would corrupt tiles outside
+	// the shape range. Full update required. Partial is only safe when atlas is unchanged.
+	const Int BM = 4; // margin for blend effects that reach 1-2 tiles outside the shape
+	IRegion2D shapeRange;
+	if (rMaxX >= rMinX && rMaxY >= rMinY) {
+		shapeRange = { std::max(0, rMinX - BM), std::max(0, rMinY - BM),
+		               std::min(mapW, rMaxX + BM + 1), std::min(mapH, rMaxY + BM + 1) };
+	} else {
+		shapeRange = {0, 0, 0, 0}; // empty shape — no tiles changed
+	}
 	if (needsOptimize)
-		htMapCopy->optimizeTiles();
-
-	IRegion2D partialRange = {0, 0, 0, 0};
-	pDoc->updateHeightMap(htMapCopy, false, partialRange);
-	WBDocUndoable* pUndo = new WBDocUndoable(pDoc, htMapCopy);
+		pDoc->updateHeightMap(pHM, false, shapeRange); // full update — atlas was rebuilt
+	else
+		pDoc->updateHeightMap(pHM, true, shapeRange);  // partial update safe — atlas unchanged
+	ShapeFillApplyUndoable* pUndo = new ShapeFillApplyUndoable(pDoc, htBefore, pHM, shapeRange);
 	pDoc->AddAndDoUndoable(pUndo);
 	REF_PTR_RELEASE(pUndo);
-	REF_PTR_RELEASE(htMapCopy);
+	REF_PTR_RELEASE(htBefore);
+	AfxGetApp()->EndWaitCursor();
 	invalidateBothViews();
 }
 
@@ -563,6 +653,53 @@ void ShapeFillTool::flipSelectedShape(Bool horizontal)
 			if (horizontal) pt.tx = cx2 - pt.tx;
 			else             pt.ty = cy2 - pt.ty;
 		}
+	}
+
+	if (CWorldBuilderDoc* pDoc = getActiveDoc())
+		pushUndo(pDoc, before);
+}
+
+// TheSuperHackers @feature Nemellud 25/05/2026 ShapeFillTool: rotate selected shape 90° CW
+void ShapeFillTool::rotateSelectedShape()
+{
+	ShapeDef* shape = findShape(m_selectedId);
+	if (!shape) return;
+
+	auto before = captureSnapshot();
+
+	// 90° CW in tile coords (Y-down screen space): dx'=-dy, dy'=dx
+	auto rotatePts = [](std::vector<ShapeVertex>& pts, Int cx2, Int cy2) {
+		for (auto& pt : pts) {
+			Int dx = 2 * pt.tx - cx2;
+			Int dy = 2 * pt.ty - cy2;
+			pt.tx = (cx2 - dy) / 2;
+			pt.ty = (cy2 + dx) / 2;
+		}
+	};
+
+	if (shape->type == SHAPE_RECT) {
+		Int cx2 = shape->x0 + shape->x1;
+		Int cy2 = shape->y0 + shape->y1;
+		Int hw  = (shape->x1 - shape->x0);  // full width
+		Int hh  = (shape->y1 - shape->y0);  // full height
+		// After 90° CW: new width = old height, new height = old width
+		shape->x0 = (cx2 - hh) / 2;
+		shape->y0 = (cy2 - hw) / 2;
+		shape->x1 = (cx2 + hh) / 2;
+		shape->y1 = (cy2 + hw) / 2;
+		rotatePts(shape->innerPoints, cx2, cy2);
+	} else if (shape->type == SHAPE_CIRCLE) {
+		// Circle is symmetric — no rotation needed
+	} else {
+		Int minX = INT_MAX, maxX = INT_MIN, minY = INT_MAX, maxY = INT_MIN;
+		for (const auto& pt : shape->points) {
+			minX = std::min(minX, pt.tx); maxX = std::max(maxX, pt.tx);
+			minY = std::min(minY, pt.ty); maxY = std::max(maxY, pt.ty);
+		}
+		Int cx2 = minX + maxX;
+		Int cy2 = minY + maxY;
+		rotatePts(shape->points,      cx2, cy2);
+		rotatePts(shape->innerPoints, cx2, cy2);
 	}
 
 	if (CWorldBuilderDoc* pDoc = getActiveDoc())

@@ -70,6 +70,7 @@ public:
 	static void updateFromTool();
 	static void updateCoordLabel(Int tx, Int ty);
 	static void updateTopDownState();
+	static void openTexPicker(Bool inner); // opens native TerrainModal for inner (true) or border tex
 
 private:
 	static ShapeFillOptions* m_staticThis;

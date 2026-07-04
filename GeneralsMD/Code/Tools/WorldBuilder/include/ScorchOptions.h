@@ -82,6 +82,9 @@ public:
 	static void update();
 	static Scorches getScorchType() {return m_scorchtype;}
 	static Real getScorchSize() {return m_scorchsize;}
+	// TheSuperHackers @feature Nemellud 25/05/2026 EmbeddedMode: pipe-accessible scorch setters
+	static void setScorchType(int t) { m_scorchtype = static_cast<Scorches>(t); }
+	static void setScorchSize(Real s) { m_scorchsize = s; }
 
 	virtual void GetPopSliderInfo(const long sliderID, long *pMin, long *pMax, long *pLineSize, long *pInitial) override;
 	virtual void PopSliderChanged(const long sliderID, long theVal) override;

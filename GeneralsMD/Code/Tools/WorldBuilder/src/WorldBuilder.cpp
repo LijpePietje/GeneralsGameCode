@@ -158,6 +158,7 @@ FileClass * WB_W3DFileSystem::Get_File( char const *filename )
 // The one and only CWorldBuilderApp object
 
 static CWorldBuilderApp theApp;
+Bool CWorldBuilderApp::s_embeddedMode = FALSE;
 HWND ApplicationHWnd = nullptr;
 
 /**
@@ -296,15 +297,26 @@ BOOL CWorldBuilderApp::InitInstance()
 	gFirstCP = TheMemoryPoolFactory->debugSetCheckpoint();
 #endif
 
-	SplashScreen loadWindow;
-	loadWindow.Create(IDD_LOADING, loadWindow.GetDesktopWindow());
-	loadWindow.SetWindowText("Loading Worldbuilder");
-	loadWindow.ShowWindow(SW_SHOW);
-	loadWindow.UpdateWindow();
+	// TheSuperHackers @feature Nemellud 24/05/2026 EmbeddedMode: parse /embedded flag before splash
+	{
+		CString cmdLine = GetCommandLine();
+		s_embeddedMode = (cmdLine.Find(_T("/embedded")) >= 0);
+	}
 
-	CRect rect(15, 315, 230, 333);
-	loadWindow.setTextOutputLocation(rect);
-	loadWindow.outputText(IDS_SPLASH_LOADING);
+	// TheSuperHackers @fix Nemellud 06/06/2026 EmbeddedMode: always show entire 3D map — registry may have ShowEntireMap=0 from a previous partial-view session.
+	WriteProfileInt("MainFrame", "ShowEntireMap", 1);
+
+	if (!s_embeddedMode) {
+		SplashScreen loadWindow;
+		loadWindow.Create(IDD_LOADING, loadWindow.GetDesktopWindow());
+		loadWindow.SetWindowText("Loading Worldbuilder");
+		loadWindow.ShowWindow(SW_SHOW);
+		loadWindow.UpdateWindow();
+
+		CRect rect(15, 315, 230, 333);
+		loadWindow.setTextOutputLocation(rect);
+		loadWindow.outputText(IDS_SPLASH_LOADING);
+	}
 
 	// not part of the subsystem list, because it should normally never be reset!
 	TheNameKeyGenerator = new NameKeyGenerator;
@@ -403,6 +415,38 @@ BOOL CWorldBuilderApp::InitInstance()
 	initSubsystem(TheDamageFXStore, new DamageFXStore(), nullptr, "Data\\INI\\DamageFX");
 	initSubsystem(TheArmorStore, new ArmorStore(), nullptr, "Data\\INI\\Armor");
 	initSubsystem(TheThingFactory, new ThingFactory(), "Data\\INI\\Default\\Object", "Data\\INI\\Object");
+
+	// TheSuperHackers @feature Nemellud 01/06/2026 WBExtra: palm tree objects built into WB — no loose INI needed
+	// Written to %TEMP% at startup so the game install directory stays clean (no anti-cheat trigger).
+	{
+		static const char* WB_EXTRA_OBJECTS =
+			"Object DatePalm\n  Draw = W3DTreeDraw ModuleTag_01\n    ModelName = PTPalm01\n    TextureName = PTPalm01.tga\n    DoTopple = No\n    DoShadow = Yes\n  End\n  DisplayName = OBJECT:DatePalm\n  EditorSorting = SHRUBBERY\n  KindOf = SHRUBBERY IMMOBILE IGNORED_IN_GUI OPTIMIZED_TREE\n  ArmorSet\n    Conditions = None\n    Armor = TreeArmor\n  End\n  Body = HighlanderBody ModuleTag_10\n    MaxHealth = 50.0\n    InitialHealth = 50.0\n  End\nEnd\n"
+			"Object PalmTree01\n  Draw = W3DTreeDraw ModuleTag_01\n    ModelName = PTPalm01\n    TextureName = PTPalm01.tga\n    DoTopple = No\n    DoShadow = Yes\n  End\n  DisplayName = OBJECT:PalmTree01\n  EditorSorting = SHRUBBERY\n  KindOf = SHRUBBERY IMMOBILE IGNORED_IN_GUI OPTIMIZED_TREE\n  ArmorSet\n    Conditions = None\n    Armor = TreeArmor\n  End\n  Body = HighlanderBody ModuleTag_10\n    MaxHealth = 50.0\n    InitialHealth = 50.0\n  End\nEnd\n"
+			"Object PalmTree02\n  Draw = W3DTreeDraw ModuleTag_01\n    ModelName = PTPalm02\n    TextureName = PTPalm02a.tga\n    DoTopple = No\n    DoShadow = Yes\n  End\n  DisplayName = OBJECT:PalmTree02\n  EditorSorting = SHRUBBERY\n  KindOf = SHRUBBERY IMMOBILE IGNORED_IN_GUI OPTIMIZED_TREE\n  ArmorSet\n    Conditions = None\n    Armor = TreeArmor\n  End\n  Body = HighlanderBody ModuleTag_10\n    MaxHealth = 50.0\n    InitialHealth = 50.0\n  End\nEnd\n"
+			"Object PalmTree03\n  Draw = W3DTreeDraw ModuleTag_01\n    ModelName = PTPalm03\n    TextureName = PTPalm01.tga\n    DoTopple = No\n    DoShadow = Yes\n  End\n  DisplayName = OBJECT:PalmTree03\n  EditorSorting = SHRUBBERY\n  KindOf = SHRUBBERY IMMOBILE IGNORED_IN_GUI OPTIMIZED_TREE\n  ArmorSet\n    Conditions = None\n    Armor = TreeArmor\n  End\n  Body = HighlanderBody ModuleTag_10\n    MaxHealth = 50.0\n    InitialHealth = 50.0\n  End\nEnd\n"
+			"Object DatePalmTree01\n  Draw = W3DTreeDraw ModuleTag_01\n    ModelName = PTPalm01\n    TextureName = PTPalm01.tga\n    DoTopple = No\n    DoShadow = Yes\n  End\n  DisplayName = OBJECT:DatePalmTree01\n  EditorSorting = SHRUBBERY\n  KindOf = SHRUBBERY IMMOBILE IGNORED_IN_GUI OPTIMIZED_TREE\n  ArmorSet\n    Conditions = None\n    Armor = TreeArmor\n  End\n  Body = HighlanderBody ModuleTag_10\n    MaxHealth = 50.0\n    InitialHealth = 50.0\n  End\nEnd\n"
+			"Object DatePalmTree02\n  Draw = W3DTreeDraw ModuleTag_01\n    ModelName = PTPalm02\n    TextureName = PTPalm02a.tga\n    DoTopple = No\n    DoShadow = Yes\n  End\n  DisplayName = OBJECT:DatePalmTree02\n  EditorSorting = SHRUBBERY\n  KindOf = SHRUBBERY IMMOBILE IGNORED_IN_GUI OPTIMIZED_TREE\n  ArmorSet\n    Conditions = None\n    Armor = TreeArmor\n  End\n  Body = HighlanderBody ModuleTag_10\n    MaxHealth = 50.0\n    InitialHealth = 50.0\n  End\nEnd\n"
+			"Object DatePalmTree03\n  Draw = W3DTreeDraw ModuleTag_01\n    ModelName = PTPalm04\n    TextureName = PTPalm01.tga\n    DoTopple = No\n    DoShadow = Yes\n  End\n  DisplayName = OBJECT:DatePalmTree03\n  EditorSorting = SHRUBBERY\n  KindOf = SHRUBBERY IMMOBILE IGNORED_IN_GUI OPTIMIZED_TREE\n  ArmorSet\n    Conditions = None\n    Armor = TreeArmor\n  End\n  Body = HighlanderBody ModuleTag_10\n    MaxHealth = 50.0\n    InitialHealth = 50.0\n  End\nEnd\n"
+			"Object MesaDatePalm01\n  Draw = W3DTreeDraw ModuleTag_01\n    ModelName = PTXPALM01\n    TextureName = PTXPALM01.tga\n    DoTopple = No\n    DoShadow = Yes\n  End\n  DisplayName = OBJECT:MesaDatePalm01\n  EditorSorting = SHRUBBERY\n  KindOf = SHRUBBERY IMMOBILE IGNORED_IN_GUI OPTIMIZED_TREE\n  ArmorSet\n    Conditions = None\n    Armor = TreeArmor\n  End\n  Body = HighlanderBody ModuleTag_10\n    MaxHealth = 50.0\n    InitialHealth = 50.0\n  End\nEnd\n"
+			"Object MesaDatePalm02\n  Draw = W3DTreeDraw ModuleTag_01\n    ModelName = PTXPALM02\n    TextureName = PTXPALM02_A.tga\n    DoTopple = No\n    DoShadow = Yes\n  End\n  DisplayName = OBJECT:MesaDatePalm02\n  EditorSorting = SHRUBBERY\n  KindOf = SHRUBBERY IMMOBILE IGNORED_IN_GUI OPTIMIZED_TREE\n  ArmorSet\n    Conditions = None\n    Armor = TreeArmor\n  End\n  Body = HighlanderBody ModuleTag_10\n    MaxHealth = 50.0\n    InitialHealth = 50.0\n  End\nEnd\n";
+
+		char tmpPath[MAX_PATH] = "";
+		DWORD tmpLen = GetTempPathA(MAX_PATH, tmpPath);
+		if (tmpLen > 0 && tmpLen < MAX_PATH - 32) {
+			strncat_s(tmpPath, sizeof(tmpPath), "wb_extra_objects.ini", _TRUNCATE);
+			FILE* f = nullptr;
+			fopen_s(&f, tmpPath, "w");
+			if (f) {
+				fputs(WB_EXTRA_OBJECTS, f);
+				fclose(f);
+				try {
+					INI extraIni;
+					extraIni.load(AsciiString(tmpPath), INI_LOAD_OVERWRITE, nullptr);
+				} catch (...) {}
+			}
+		}
+	}
+
 	initSubsystem(TheCrateSystem, new CrateSystem(), "Data\\INI\\Default\\Crate", "Data\\INI\\Crate");
 	initSubsystem(TheUpgradeCenter, new UpgradeCenter, "Data\\INI\\Default\\Upgrade", "Data\\INI\\Upgrade");
 	initSubsystem(TheAnim2DCollection, new Anim2DCollection ); //Init's itself.
@@ -458,6 +502,28 @@ BOOL CWorldBuilderApp::InitInstance()
 	// The one and only window has been initialized, so show and update it.
 	m_pMainWnd->ShowWindow(SW_SHOW);
 	m_pMainWnd->UpdateWindow();
+
+	// TheSuperHackers @feature Nemellud 24/05/2026 EmbeddedMode: strip chrome, hide from taskbar, start pipe
+	if (s_embeddedMode && m_pMainWnd) {
+		HWND hwnd = m_pMainWnd->GetSafeHwnd();
+
+		// Strip all chrome — done post-create so MFC initialises normally first
+		LONG style = GetWindowLong(hwnd, GWL_STYLE);
+		style &= ~(WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU);
+		style |= WS_POPUP;
+		SetWindowLong(hwnd, GWL_STYLE, style);
+
+		// Hide from taskbar, prevent focus stealing
+		LONG ex = GetWindowLong(hwnd, GWL_EXSTYLE);
+		SetWindowLong(hwnd, GWL_EXSTYLE,
+			(ex | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE) & ~WS_EX_APPWINDOW);
+
+		// Apply style changes
+		::SetWindowPos(hwnd, NULL, 0, 0, 0, 0,
+			SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+
+		WbPipeServer::Start(hwnd);
+	}
 
 	// Parse command line for standard shell commands, DDE, file open
 //	CCommandLineInfo cmdInfo;

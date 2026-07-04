@@ -36,9 +36,11 @@
 // MoundTool class.
 //
 
-Int MoundTool::m_moundHeight=0;
-Int MoundTool::m_brushWidth;
-Int MoundTool::m_brushFeather;
+// TheSuperHackers @feature Nemellud 26/05/2026 ShapeFillTool: square brush support for MoundTool/DigTool
+Int  MoundTool::m_moundHeight=0;
+Int  MoundTool::m_brushWidth;
+Int  MoundTool::m_brushFeather;
+Bool MoundTool::m_brushSquare=false;
 
 
 
@@ -63,31 +65,30 @@ void MoundTool::setMoundHeight(Int height)
 {
 	if (m_moundHeight != height) {
 		m_moundHeight = height;
-		// notify mound options panel
 		MoundOptions::setHeight(height);
-		DrawObject::setBrushFeedbackParms(false, m_brushWidth, m_brushFeather);
+		DrawObject::setBrushFeedbackParms(m_brushSquare, m_brushWidth, m_brushFeather);
 	}
 };
-/// Set the brush width and notify the height options panel of the change.
 void MoundTool::setWidth(Int width)
 {
 	if (m_brushWidth != width) {
 		m_brushWidth = width;
-		// notify brush palette options panel
 		MoundOptions::setWidth(width);
-		DrawObject::setBrushFeedbackParms(false, m_brushWidth, m_brushFeather);
+		DrawObject::setBrushFeedbackParms(m_brushSquare, m_brushWidth, m_brushFeather);
 	}
 };
-
-/// Set the brush feather and notify the height options panel of the change.
 void MoundTool::setFeather(Int feather)
 {
 	if (m_brushFeather != feather) {
 		m_brushFeather = feather;
-		// notify height palette options panel
 		MoundOptions::setFeather(feather);
-		DrawObject::setBrushFeedbackParms(false, m_brushWidth, m_brushFeather);
+		DrawObject::setBrushFeedbackParms(m_brushSquare, m_brushWidth, m_brushFeather);
 	}
+};
+void MoundTool::setShape(Bool square)
+{
+	m_brushSquare = square;
+	DrawObject::setBrushFeedbackParms(m_brushSquare, m_brushWidth, m_brushFeather);
 };
 
 
@@ -96,7 +97,7 @@ void MoundTool::activate()
 {
 	CMainFrame::GetMainFrame()->showOptionsDialog(IDD_MOUND_OPTIONS);
 	DrawObject::setDoBrushFeedback(true);
-	DrawObject::setBrushFeedbackParms(false, m_brushWidth, m_brushFeather);
+	DrawObject::setBrushFeedbackParms(m_brushSquare, m_brushWidth, m_brushFeather);
 }
 
 void MoundTool::mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWorldBuilderDoc *pDoc)
@@ -144,7 +145,7 @@ void MoundTool::mouseMoved(TTrackingMode m, CPoint viewPt, WbView* pView, CWorld
 	int setFeather = m_brushFeather;
 	if (setFeather>0) {
 		brushWidth += 2*setFeather;
-		brushWidth += 2; // for round brush.
+		if (!m_brushSquare) brushWidth += 2; // round brush needs extra padding
 	}
 
 	CPoint ndx;
@@ -172,9 +173,11 @@ void MoundTool::mouseMoved(TTrackingMode m, CPoint viewPt, WbView* pView, CWorld
 				continue;
 			}
 #if 1
-			// New floating point based blending calculation.  jba.
 			Real blendFactor;
-			blendFactor = calcRoundBlendFactor(ndx, i, j, m_brushWidth, m_brushFeather);
+			if (m_brushSquare)
+				blendFactor = calcSquareBlendFactor(ndx, i, j, m_brushWidth, m_brushFeather);
+			else
+				blendFactor = calcRoundBlendFactor(ndx, i, j, m_brushWidth, m_brushFeather);
 			Int curHeight = m_htMapEditCopy->getHeight(i,j);
 			float fNewHeight = (blendFactor*(htDelta+curHeight))+((1.0f-blendFactor)*curHeight);
 			Int newHeight = floor(fNewHeight+0.5f);

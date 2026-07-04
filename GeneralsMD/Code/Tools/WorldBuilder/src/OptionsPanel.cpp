@@ -54,6 +54,8 @@ BEGIN_MESSAGE_MAP(COptionsPanel, CDialog)
 	ON_COMMAND(ID_EDIT_UNDO, OnEditUndo)
 	ON_UPDATE_COMMAND_UI(ID_EDIT_UNDO, OnUpdateEditUndo)
 	//}}AFX_MSG_MAP
+	ON_WM_CTLCOLOR()
+	ON_WM_ERASEBKGND()
 END_MESSAGE_MAP()
 
 /////////////////////////////////////////////////////////////////////////////
@@ -107,4 +109,30 @@ void COptionsPanel::OnUpdateEditUndo(CCmdUI* pCmdUI)
 	if (pDoc) {
 		pDoc->OnUpdateEditUndo(pCmdUI);
 	}
+}
+
+// TheSuperHackers @feature Nemellud 23/05/2026 DarkTheme: return dark brush for all child controls
+HBRUSH COptionsPanel::OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor)
+{
+	static HBRUSH hbrBackground = CreateSolidBrush(WB_DARK_BG);
+	static HBRUSH hbrEdit       = CreateSolidBrush(WB_DARK_EDIT);
+
+	if (nCtlColor == CTLCOLOR_EDIT || nCtlColor == CTLCOLOR_LISTBOX) {
+		pDC->SetBkColor(WB_DARK_EDIT);
+		pDC->SetTextColor(WB_DARK_TEXT);
+		return hbrEdit;
+	}
+	pDC->SetBkColor(WB_DARK_BG);
+	pDC->SetTextColor(WB_DARK_TEXT);
+	pDC->SetBkMode(TRANSPARENT);
+	return hbrBackground;
+}
+
+// TheSuperHackers @feature Nemellud 23/05/2026 DarkTheme: fill dialog background with dark color
+BOOL COptionsPanel::OnEraseBkgnd(CDC* pDC)
+{
+	CRect rect;
+	GetClientRect(&rect);
+	pDC->FillSolidRect(&rect, WB_DARK_BG);
+	return TRUE;
 }

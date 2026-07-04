@@ -80,6 +80,10 @@ public:
 	static void setFeather(Int feather);
 	static void setRate(Int rate);
 	static void setRadius(Int radius);
+	// TheSuperHackers @feature Nemellud 25/05/2026 EmbeddedMode: pipe-accessible getters
+	static Int getFeather() { return m_currentFeather; }
+	static Int getRadius()  { return m_currentRadius; }
+	static Int getRate()    { return m_currentRate; }
 
 public:
 

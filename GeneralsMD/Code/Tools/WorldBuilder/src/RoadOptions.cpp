@@ -608,3 +608,22 @@ void RoadOptions::OnApplyRoad()
 		ChangeRoadType(m_currentRoadName);
 	}
 }
+
+// TheSuperHackers @feature Nemellud 07/06/2026 EmbeddedMode: set road type and corner flags from pipe
+void RoadOptions::setFromPipe(const char* name, bool angled, bool tight, bool bridge)
+{
+	if (name && name[0]) {
+		m_currentRoadName = name;
+	}
+	m_angleCorners = angled;
+	m_tightCurve   = tight;
+	if (bridge) {
+		// Force isBridge() == true: index must be >= m_numberOfRoads
+		m_currentRoadIndex = m_numberOfRoads > 0 ? m_numberOfRoads : 1;
+	} else {
+		m_currentRoadIndex = 0;
+	}
+	if (m_staticThis) {
+		m_staticThis->updateLabel();
+	}
+}

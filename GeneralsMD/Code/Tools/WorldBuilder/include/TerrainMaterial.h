@@ -97,6 +97,12 @@ public:
 
 	static Bool isPaintingPathingInfo() {return m_paintingPathingInfo;}
 	static Bool isPaintingPassable() {return m_paintingPassable;}
+	// TheSuperHackers @feature Nemellud 25/05/2026 EmbeddedMode: pipe-accessible width getter and mode setter
+	static Int getWidth() { return m_staticThis ? m_staticThis->m_currentWidth : 2; }
+	static void setPaintingMode(bool paintPathing, bool passable) {
+		m_paintingPathingInfo = paintPathing ? TRUE : FALSE;
+		m_paintingPassable    = passable ? TRUE : FALSE;
+	}
 
 public:
 	Bool setTerrainTreeViewSelection(HTREEITEM parent, Int selection);

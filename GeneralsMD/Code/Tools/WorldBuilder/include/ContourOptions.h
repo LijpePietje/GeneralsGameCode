@@ -76,6 +76,10 @@ public:
 	static Int getContourWidth() {return m_contourWidth;};  ///<Returns width.
 	static Int getContourOffset() {return m_contourOffset;}; ///<Returns offset.
 	static Int getContourStep() {return m_contourStep;}; ///<Returns step.
+	// TheSuperHackers @feature Nemellud 25/05/2026 EmbeddedMode: pipe-accessible contour setters
+	static void setContourStep(Int step)     { m_contourStep   = step; }
+	static void setContourOffset(Int offset) { m_contourOffset = offset; }
+	static void setContourWidth(Int width)   { m_contourWidth  = width; }
 
 
 };

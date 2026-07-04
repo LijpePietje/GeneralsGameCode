@@ -45,6 +45,8 @@
 
 #include "Compression.h"
 #include "CUndoable.h"
+// TheSuperHackers @feature Nemellud 06/06/2026 EmbeddedMode: pipe-driven new map / resize
+#include "WbPipeServer.h"
 #include "LayersList.h"
 #include "MainFrm.h"
 #include "NewHeightMap.h"
@@ -1115,6 +1117,46 @@ void CWorldBuilderDoc::OnFileResize()
 }
 
 
+// TheSuperHackers @feature Nemellud 06/06/2026 EmbeddedMode: resize map via pipe (no native dialog)
+void CWorldBuilderDoc::ResizeFromPipe()
+{
+	if (!m_heightMap) return;
+	TNewHeightInfo hi;
+	hi.xExtent       = g_wbResizeMapReq.x;
+	hi.yExtent       = g_wbResizeMapReq.y;
+	hi.borderWidth   = g_wbResizeMapReq.border;
+	hi.initialHeight = g_wbResizeMapReq.height;
+	hi.forResize     = true;
+	hi.anchorTop     = g_wbResizeMapReq.anchorTop    ? TRUE : FALSE;
+	hi.anchorBottom  = g_wbResizeMapReq.anchorBottom ? TRUE : FALSE;
+	hi.anchorLeft    = g_wbResizeMapReq.anchorLeft   ? TRUE : FALSE;
+	hi.anchorRight   = g_wbResizeMapReq.anchorRight  ? TRUE : FALSE;
+	g_wbResizeMapReq.valid = false;
+
+	WorldHeightMapEdit *htMapEditCopy = GetHeightMap()->duplicate();
+	if (htMapEditCopy == nullptr) return;
+	Coord3D objOffset;
+	if (htMapEditCopy->resize(hi.xExtent, hi.yExtent, hi.initialHeight, hi.borderWidth,
+		hi.anchorTop, hi.anchorBottom, hi.anchorLeft, hi.anchorRight, &objOffset)) {
+		WBDocUndoable *pUndo = new WBDocUndoable(this, htMapEditCopy, &objOffset);
+		this->AddAndDoUndoable(pUndo);
+		REF_PTR_RELEASE(pUndo);
+		POSITION pos = GetFirstViewPosition();
+		IRegion2D partialRange = {0,0,0,0};
+		Get3DView()->updateHeightMapInView(m_heightMap, false, partialRange);
+		while (pos != nullptr) {
+			CView* pView = GetNextView(pos);
+			WbView* pWView = (WbView *)pView;
+			ASSERT_VALID(pWView);
+			pWView->adjustDocSize();
+			pWView->Invalidate();
+		}
+	} else {
+		::Beep(1000,500);
+	}
+	REF_PTR_RELEASE(htMapEditCopy);
+}
+
 void CWorldBuilderDoc::OnTsRemap()
 {
 	if (m_heightMap) {
@@ -1250,7 +1292,15 @@ BOOL CWorldBuilderDoc::OnNewDocument()
 	hi.yExtent = AfxGetApp()->GetProfileInt("GameOptions", "Default Map Y-size", 100);
 	hi.borderWidth = AfxGetApp()->GetProfileInt("GameOptions", "Default Map Border", 30);
 	hi.forResize = false;
-	if (!firstTime) {
+	// TheSuperHackers @feature Nemellud 06/06/2026 EmbeddedMode: bypass native dialog when pipe request is active
+	if (g_wbNewMapReq.valid) {
+		hi.xExtent      = g_wbNewMapReq.x;
+		hi.yExtent      = g_wbNewMapReq.y;
+		hi.borderWidth  = g_wbNewMapReq.border;
+		hi.initialHeight = g_wbNewMapReq.height;
+		g_wbNewMapReq.valid = false;
+		firstTime = false; // future manual new-map will show dialog
+	} else if (!firstTime) {
 		CString label;
 		label.LoadString(IDS_NEW);
 		CNewHeightMap htDialog(&hi, label);

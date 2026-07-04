@@ -53,6 +53,7 @@
 #include "ScorchTool.h"
 #include "RulerTool.h"
 #include "ShapeFillTool.h"
+#include "WbPipeServer.h"
 #include "Common/Debug.h"
 
 /////////////////////////////////////////////////////////////////////////////
@@ -131,6 +132,9 @@ protected:
 
 	AsciiString				m_currentDirectory; ///< Current directory for open file.
 
+	// TheSuperHackers @feature Nemellud 24/05/2026 EmbeddedMode: headless engine flag
+	static Bool s_embeddedMode;
+
 	CDocTemplate			*m_3dtemplate;
 
 	MapObject					*m_pasteMapObjList;	///< List of copied/cut map objects.
@@ -145,6 +149,8 @@ protected:
 public:
 
 	CDocTemplate *Get3dTemplate() { return m_3dtemplate; }
+
+	static Bool IsEmbedded() { return s_embeddedMode; }
 
 	/// Set the brush tool as the active tool.
 	void selectBrushTool() { setActiveTool(&m_brushTool); }

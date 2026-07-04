@@ -123,6 +123,21 @@ public:
 	virtual void Undo() override;
 };
 
+// Custom undoable for in-place heightmap apply — enables partial render update.
+class ShapeFillApplyUndoable : public Undoable {
+	CWorldBuilderDoc*   m_pDoc;
+	WorldHeightMapEdit* m_pBefore; // pre-apply snapshot (for Undo)
+	WorldHeightMapEdit* m_pAfter;  // post-apply = the live HM (for Redo)
+	IRegion2D           m_range;
+public:
+	ShapeFillApplyUndoable(CWorldBuilderDoc* pDoc, WorldHeightMapEdit* before,
+	                        WorldHeightMapEdit* after, IRegion2D range);
+	virtual ~ShapeFillApplyUndoable() override;
+	virtual void Do() override;
+	virtual void Undo() override;
+	virtual void Redo() override;
+};
+
 // -------------------------------------------------------------------------
 // ShapeFillTool
 // -------------------------------------------------------------------------
@@ -148,11 +163,14 @@ public:
 	static SFToolMode getMode() { return m_mode; }
 
 	// Shape management
+	// TheSuperHackers @feature Nemellud 25/05/2026 EmbeddedMode: programmatic shape creation for pipe
+	static Int  addShape(ShapeDef def);
 	static void applySelectedShape(CWorldBuilderDoc* pDoc);
 	static void deleteSelectedShape();
 	static void copySelectedShape();
 	static void pasteShape();
 	static void flipSelectedShape(Bool horizontal);
+	static void rotateSelectedShape();
 	static void finishPolygon();
 
 	// Properties (set from options dialog)

@@ -36,21 +36,24 @@ protected:
 	Bool								m_raising;  ///< True if mounding, false if digging.
 	Int									m_lastMoveTime;  ///< Last system clock time.
 
-	static Int m_moundHeight;
-	static Int m_brushWidth;
-	static Int m_brushFeather;
+	static Int  m_moundHeight;
+	static Int  m_brushWidth;
+	static Int  m_brushFeather;
+	static Bool m_brushSquare;
 
 public:
 	MoundTool();
 	virtual ~MoundTool() override;
 
 public:
-	static Int getMoundHeight() {return m_moundHeight;};
+	static Int  getMoundHeight() {return m_moundHeight;};
 	static void setMoundHeight(Int height);
-	static Int getWidth() {return m_brushWidth;};  ///<Returns width.
-	static Int getFeather() {return m_brushFeather;}; ///<Returns feather.
+	static Int  getWidth()   {return m_brushWidth;};
+	static Int  getFeather() {return m_brushFeather;};
+	static Bool getSquare()  {return m_brushSquare;};
 	static void setWidth(Int width);
 	static void setFeather(Int feather);
+	static void setShape(Bool square);
 
 public:
 	virtual void mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWorldBuilderDoc *pDoc) override;

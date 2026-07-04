@@ -89,6 +89,8 @@ public:
 	static Int getHeight() { return m_waterHeight;};
 	static Int getSpacing() { return m_waterPointSpacing;};
 	static Bool getCreatingWaterAreas() {return m_creatingWaterAreas;}
+	// TheSuperHackers @feature Nemellud 25/05/2026 EmbeddedMode: pipe-accessible spacing setter
+	static void setSpacing(Int spacing) { m_waterPointSpacing = spacing; }
 
 public:
 

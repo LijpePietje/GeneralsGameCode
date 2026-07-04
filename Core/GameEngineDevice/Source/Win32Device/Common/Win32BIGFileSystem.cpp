@@ -65,8 +65,15 @@ void Win32BIGFileSystem::init() {
     GetStringFromGeneralsRegistry("", "InstallPath", installPath );
     //@todo this will need to be ramped up to a crash for release
     DEBUG_ASSERTCRASH(!installPath.isEmpty(), ("Be 1337! Go install Generals!"));
-    if (!installPath.isEmpty())
-      loadBigFilesFromDirectory(installPath, "*.big");
+
+    if (!installPath.isEmpty()) {
+        loadBigFilesFromDirectory(installPath, "*.big");
+        // TheSuperHackers @fix Nemellud 30/05/2026 Win32BIGFileSystem: also scan Generals subfolder
+        // Origin/EA App installs set InstallPath to the parent directory; Terrain.big lives one level deeper.
+        AsciiString generalsSubdir = installPath;
+        generalsSubdir.concat("Command and Conquer Generals\\");
+        loadBigFilesFromDirectory(generalsSubdir, "*.big");
+    }
 #endif
 }
 

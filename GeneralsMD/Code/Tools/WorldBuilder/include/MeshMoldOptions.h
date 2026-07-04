@@ -100,6 +100,10 @@ public:
 	static Bool isDoingPreview() {return m_doingPreview;};
 	static Bool isRaisingOnly() {return m_raiseOnly;};
 	static Bool isLoweringOnly() {return m_lowerOnly;};
+	// TheSuperHackers @feature Nemellud 25/05/2026 EmbeddedMode: pipe-accessible setters
+	static void setRaiseOnly(Bool b) { m_raiseOnly = b; }
+	static void setLowerOnly(Bool b) { m_lowerOnly = b; }
+	static void applyMesh() { if (m_staticThis) m_staticThis->OnApplyMesh(); }
 	static AsciiString getModelName() {if (m_staticThis) return m_staticThis->m_meshModelName; return "";};
 
 public:	 //PopupSliderOwner methods.

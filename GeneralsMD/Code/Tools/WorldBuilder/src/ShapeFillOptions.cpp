@@ -488,6 +488,13 @@ void ShapeFillOptions::OnClick3D()
 		m_staticThis->refreshModeButtons();
 }
 
+/* static */ void ShapeFillOptions::openTexPicker(Bool inner)
+{
+	if (!m_staticThis) return;
+	if (inner) m_staticThis->OnSelectInnerTex();
+	else       m_staticThis->OnSelectBorderTex();
+}
+
 void ShapeFillOptions::refreshModeUI()
 {
 	SFToolMode mode = ShapeFillTool::getMode();

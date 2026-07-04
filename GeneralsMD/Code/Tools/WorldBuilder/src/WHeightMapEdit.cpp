@@ -148,13 +148,36 @@ WorldHeightMapEdit::WorldHeightMapEdit(Int width, Int height, UnsignedByte initi
 	}
 
 	// fill the map with a certain terrain texture
+	Int baseClass = m_numGlobalTextureClasses - 1;
 	for (i=0; i<m_width; i++) {
 		for (j=0; j<m_height; j++) {
-			Short ndx = getTileNdxForClass( i, j, m_numGlobalTextureClasses-1 );
+			Short ndx = getTileNdxForClass( i, j, baseClass );
 			m_tileNdxes[i+m_width*j] = ndx;
 		}
 	}
+
+	// TheSuperHackers @feature Nemellud 06/06/2026 EmbeddedMode: diagnostic log for new map creation
+	{
+		FILE *f = fopen("C:\\temp\\wbnewmap.log", "a");
+		if (f) {
+			fprintf(f, "NewMap: playable=%dx%d border=%d initH=%d -> m_width=%d m_height=%d dataSize=%d numGlobalTexClasses=%d baseClass=%d\n",
+				width - 2*border, height - 2*border, border, (int)initialHeight,
+				m_width, m_height, m_dataSize, m_numGlobalTextureClasses, baseClass);
+			// sample a few tile indices
+			if (m_dataSize > 0) {
+				fprintf(f, "  tileNdx[0,0]=%d [w/2,h/2]=%d [w-1,h-1]=%d\n",
+					(int)m_tileNdxes[0],
+					(int)m_tileNdxes[(m_width/2) + m_width*(m_height/2)],
+					(int)m_tileNdxes[(m_width-1) + m_width*(m_height-1)]);
+			}
+			fclose(f);
+		}
+	}
+
 	setDrawOrg(0,0);
+	// TheSuperHackers @fix Nemellud 06/06/2026 WHeightMapEdit: new map draw area was limited to NORMAL_DRAW_WIDTH (129).
+	m_drawWidthX = m_width;
+	m_drawHeightY = m_height;
 
 	ICoord2D initialBorder;
 	initialBorder.x = width - 2 * border;
@@ -395,7 +418,6 @@ void WorldHeightMapEdit::loadBaseImages()
 
 	// load terrain types from INI definitions
 	TerrainType *terrain;
-
 	for( terrain = TheTerrainTypes->firstTerrain();
 	     terrain;
 			 terrain = TheTerrainTypes->nextTerrain( terrain ) )
@@ -1833,8 +1855,12 @@ Bool WorldHeightMapEdit::resize(Int newXSize, Int newYSize, Int newHeight, Int n
 				extraBlendTileNdxes[newNdx] = m_extraBlendTileNdxes[oldNdx];
 				cliffInfoNdxes[newNdx] = m_cliffInfoNdxes[oldNdx];
 			} else {
-				data[newNdx] = m_data[oldNdx];
-				tileNdxes[newNdx] = m_tileNdxes[oldNdx];
+				// TheSuperHackers @fix Nemellud 06/06/2026 WHeightMapEdit::resize: new cells outside original bounds
+				// inherited ocean tile + low border height instead of base terrain + initial height.
+				data[newNdx] = (UnsignedByte)newHeight;
+				tileNdxes[newNdx] = (m_numGlobalTextureClasses > 0)
+					? (Short)getTileNdxForClass(i, j, m_numGlobalTextureClasses - 1)
+					: 0;
 				blendTileNdxes[newNdx] = 0;
 				extraBlendTileNdxes[newNdx] = 0;
 				cliffInfoNdxes[newNdx] = 0;
@@ -1856,6 +1882,9 @@ Bool WorldHeightMapEdit::resize(Int newXSize, Int newYSize, Int newHeight, Int n
 	m_height = newYSize;
 	m_borderSize = newBorder;
 	m_dataSize = newDataSize;
+	// TheSuperHackers @fix Nemellud 06/06/2026 WHeightMapEdit::resize: draw area was not updated after resize.
+	m_drawWidthX = m_width;
+	m_drawHeightY = m_height;
 	delete(m_cellCliffState);
 	delete(m_cellFlipState);
 	Int numBytesX = (m_width+7)/8;	//how many bytes to fit all bitflags

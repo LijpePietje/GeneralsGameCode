@@ -244,17 +244,21 @@ void ShapeFillTool::rasterizeSegmentToEdges(
 void ShapeFillTool::bucketFill(CWorldBuilderDoc* pDoc, Int startTx, Int startTy)
 {
 	if (!pDoc) return;
+
+	AfxGetApp()->BeginWaitCursor(); // show hourglass while fill is running
+
 	Int fillTexClass = (m_innerTexClass >= 0) ? m_innerTexClass : 0;
 
-	WorldHeightMapEdit* htMapCopy = pDoc->GetHeightMap()->duplicate();
-	Int border = htMapCopy->getBorderSize();
-	Int mapW   = htMapCopy->getXExtent();
-	Int mapH   = htMapCopy->getYExtent();
+	WorldHeightMapEdit* pHM      = pDoc->GetHeightMap();
+	WorldHeightMapEdit* htBefore = pHM->duplicate(); // pre-apply snapshot for Undo
+	Int border = pHM->getBorderSize();
+	Int mapW   = pHM->getXExtent();
+	Int mapH   = pHM->getYExtent();
 	Int playW  = mapW - 2 * border;
 	Int playH  = mapH - 2 * border;
 
 	if (startTx < 0 || startTy < 0 || startTx >= playW || startTy >= playH) {
-		REF_PTR_RELEASE(htMapCopy);
+		REF_PTR_RELEASE(htBefore);
 		return;
 	}
 
@@ -384,13 +388,16 @@ void ShapeFillTool::bucketFill(CWorldBuilderDoc* pDoc, Int startTx, Int startTy)
 	}
 
 	// TheSuperHackers @fix Nemellud 10/05/2026 ShapeFillTool: In blend calls autoBlendOut on exterior tiles so blend starts at boundary line
-	// Apply fill texture to all visited tiles
+	// Apply fill texture to all visited tiles; track bounding box for partial render
 	Bool needsOptimize = false;
+	Int rMinX = mapW, rMinY = mapH, rMaxX = 0, rMaxY = 0;
 	for (Int ty = 0; ty < playH; ty++) {
 		for (Int tx = 0; tx < playW; tx++) {
 			if (!visited[ty * playW + tx]) continue;
 			Int hx = tx + border, hy = ty + border;
-			if (htMapCopy->setTileNdx(hx, hy, fillTexClass, false))
+			if (hx < rMinX) rMinX = hx; if (hx > rMaxX) rMaxX = hx;
+			if (hy < rMinY) rMinY = hy; if (hy > rMaxY) rMaxY = hy;
+			if (pHM->setTileNdx(hx, hy, fillTexClass, false))
 				needsOptimize = true;
 		}
 	}
@@ -402,7 +409,7 @@ void ShapeFillTool::bucketFill(CWorldBuilderDoc* pDoc, Int startTx, Int startTy)
 				for (Int tx = 0; tx < playW; tx++) {
 					if (!boundary[ty * playW + tx]) continue;
 					Int hx = tx + border, hy = ty + border;
-					htMapCopy->autoBlendOut(hx, hy);
+					pHM->autoBlendOut(hx, hy);
 				}
 			}
 		} else {
@@ -417,21 +424,33 @@ void ShapeFillTool::bucketFill(CWorldBuilderDoc* pDoc, Int startTx, Int startTy)
 						(ty < playH-1 && boundary[(ty+1)   * playW +  tx   ]);
 					if (!adjToBoundary) continue;
 					Int hx = tx + border, hy = ty + border;
-					htMapCopy->autoBlendOut(hx, hy);
+					pHM->autoBlendOut(hx, hy);
 				}
 			}
 		}
 		needsOptimize = true;
 	}
 
-	if (needsOptimize) htMapCopy->optimizeTiles();
+	if (needsOptimize) pHM->optimizeTiles();
 
-	IRegion2D partialRange = {0, 0, 0, 0};
-	pDoc->updateHeightMap(htMapCopy, false, partialRange);
-	WBDocUndoable* pUndo = new WBDocUndoable(pDoc, htMapCopy);
+	// After optimizeTiles(), m_terrainTex is freed — must use full update.
+	const Int BM = 2;
+	IRegion2D shapeRange;
+	if (rMaxX >= rMinX && rMaxY >= rMinY) {
+		shapeRange = { std::max(0, rMinX - BM), std::max(0, rMinY - BM),
+		               std::min(mapW, rMaxX + BM + 1), std::min(mapH, rMaxY + BM + 1) };
+	} else {
+		shapeRange = {0, 0, 0, 0};
+	}
+	if (needsOptimize)
+		pDoc->updateHeightMap(pHM, false, shapeRange); // full update — atlas was rebuilt
+	else
+		pDoc->updateHeightMap(pHM, true, shapeRange);  // partial update safe — atlas unchanged
+	ShapeFillApplyUndoable* pUndo = new ShapeFillApplyUndoable(pDoc, htBefore, pHM, shapeRange);
 	pDoc->AddAndDoUndoable(pUndo);
 	REF_PTR_RELEASE(pUndo);
-	REF_PTR_RELEASE(htMapCopy);
+	REF_PTR_RELEASE(htBefore);
+	AfxGetApp()->EndWaitCursor();
 	invalidateBothViews();
 }
 

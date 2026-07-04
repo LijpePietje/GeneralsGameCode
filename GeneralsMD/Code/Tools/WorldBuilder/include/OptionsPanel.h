@@ -23,6 +23,11 @@
 
 #include "resource.h"
 
+// TheSuperHackers @feature Nemellud 23/05/2026 DarkTheme: panel background color constants
+#define WB_DARK_BG    RGB(37,  37,  38)
+#define WB_DARK_TEXT  RGB(220, 220, 220)
+#define WB_DARK_EDIT  RGB(51,  51,  51)
+
 #define  OPTIONS_PANEL_SECTION "OptionsWindow"
 
 /////////////////////////////////////////////////////////////////////////////
@@ -59,6 +64,9 @@ protected:
 	afx_msg void OnEditUndo();
 	afx_msg void OnUpdateEditUndo(CCmdUI* pCmdUI);
 	//}}AFX_MSG
+	// TheSuperHackers @feature Nemellud 23/05/2026 DarkTheme: dark background and control colors
+	afx_msg HBRUSH OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor);
+	afx_msg BOOL   OnEraseBkgnd(CDC* pDC);
 	DECLARE_MESSAGE_MAP()
 };
 

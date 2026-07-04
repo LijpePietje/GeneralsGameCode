@@ -99,6 +99,8 @@ public:
 	static void updateSelection();
 	static Bool selectionIsRoadsOnly();
 	void applyToSelection();
+	// TheSuperHackers @feature Nemellud 07/06/2026 EmbeddedMode: set road options from pipe command
+	static void setFromPipe(const char* name, bool angled, bool tight, bool bridge);
 };
 
 //{{AFX_INSERT_LOCATION}}
