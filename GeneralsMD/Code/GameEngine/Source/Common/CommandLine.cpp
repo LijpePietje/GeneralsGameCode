@@ -450,6 +450,19 @@ Int parseReplay(char *args[], int num)
 	return 1;
 }
 
+// TheSuperHackers @feature Nemellud 07/07/2026 Dump every object's position/health/owner to a
+// CSV file periodically while simulating a replay (-replay -headless), for offline analysis of
+// where units actually were on the map relative to the map's own geometry.
+Int parseDumpObjectState(char *args[], int num)
+{
+	if (num > 1)
+	{
+		TheWritableGlobalData->m_dumpObjectStatePath = args[1];
+		return 2;
+	}
+	return 1;
+}
+
 Int parseJobs(char *args[], int num)
 {
 	if (num > 1)
@@ -1155,6 +1168,11 @@ static CommandLineParam paramsForStartup[] =
 	// (If you have 4 cores, call it with -jobs 4)
 	// If you do not call this, all replays will be simulated in sequence in the same process.
 	{ "-jobs", parseJobs },
+
+	// TheSuperHackers @feature Nemellud 07/07/2026
+	// Pass a CSV file path afterwards. While simulating a replay (combine with -replay -headless),
+	// every object's id/template/position/health/owner is appended to this file periodically.
+	{ "-dumpObjectState", parseDumpObjectState },
 };
 
 // These Params are parsed during Engine Init before INI data is loaded

@@ -22,10 +22,44 @@
 
 #include "Common/GameEngine.h"
 #include "Common/LocalFileSystem.h"
+#include "Common/Player.h"
 #include "Common/Recorder.h"
+#include "Common/ThingTemplate.h"
 #include "Common/WorkerProcess.h"
 #include "GameLogic/GameLogic.h"
+#include "GameLogic/Object.h"
+#include "GameLogic/Module/BodyModule.h"
 #include "GameClient/GameClient.h"
+
+// TheSuperHackers @feature Nemellud 07/07/2026 Dump every live object's id/template/position/
+// health/owner to a CSV file, for offline analysis of where units actually were on the map
+// relative to the map's own geometry (see -dumpObjectState). Called every DUMP_FRAME_INTERVAL
+// logic frames rather than every frame to keep the output file a manageable size.
+namespace
+{
+const int DUMP_FRAME_INTERVAL = 30;
+
+void dumpObjectState(FILE *f, const AsciiString &replayName)
+{
+	if (!f)
+		return;
+	UnsignedInt frame = TheGameLogic->getFrame();
+	for (Object *obj = TheGameLogic->getFirstObject(); obj; obj = obj->getNextObject())
+	{
+		const Coord3D *pos = obj->getPosition();
+		Real health = -1.0f;
+		if (obj->getBodyModule())
+			health = obj->getBodyModule()->getHealth();
+		Int playerIndex = -1;
+		if (obj->getControllingPlayer())
+			playerIndex = obj->getControllingPlayer()->getPlayerIndex();
+		fprintf(f, "%s,%u,%u,%s,%.1f,%.1f,%.1f,%.1f,%d\n",
+			replayName.str(), frame, (unsigned int)obj->getID(),
+			obj->getTemplate() ? obj->getTemplate()->getName().str() : "",
+			pos->x, pos->y, pos->z, health, playerIndex);
+	}
+}
+} // namespace
 
 
 Bool ReplaySimulation::s_isRunning = false;
@@ -75,6 +109,17 @@ int ReplaySimulation::simulateReplaysInThisProcess(const std::vector<AsciiString
 	}
 	// Note that we use printf here because this is run from cmd.
 	DWORD totalStartTimeMillis = GetTickCount();
+
+	FILE *dumpFile = nullptr;
+	if (!TheGlobalData->m_dumpObjectStatePath.isEmpty())
+	{
+		dumpFile = fopen(TheGlobalData->m_dumpObjectStatePath.str(), "w");
+		if (dumpFile)
+			fprintf(dumpFile, "replay,frame,object_id,template,x,y,z,health,player_index\n");
+		else
+			printf("Kon dump-bestand niet openen: %s\n", TheGlobalData->m_dumpObjectStatePath.str());
+	}
+
 	for (size_t i = 0; i < filenames.size(); i++)
 	{
 		AsciiString filename = filenames[i];
@@ -99,10 +144,20 @@ int ReplaySimulation::simulateReplaysInThisProcess(const std::vector<AsciiString
 					fflush(stdout);
 				}
 				TheGameLogic->UPDATE();
+				if (dumpFile && TheGameLogic->getFrame() % DUMP_FRAME_INTERVAL == 0)
+					dumpObjectState(dumpFile, filename);
 				if (TheRecorder->sawCRCMismatch())
 				{
 					numErrors++;
-					break;
+					// TheSuperHackers @feature Nemellud 07/07/2026 When dumping object state
+					// for offline analysis (not the original CRC-desync-regression use case),
+					// keep simulating past a mismatch instead of aborting - a replay recorded
+					// against a different game build than this one is expected to desync
+					// eventually, but the position/health data collected before that point
+					// (and even somewhat after, since a single mismatch doesn't invalidate the
+					// whole rest of the simulation) is still useful.
+					if (!dumpFile)
+						break;
 				}
 			}
 			UnsignedInt gameTimeSec = TheGameLogic->getFrame() / LOGICFRAMES_PER_SECOND;
@@ -125,6 +180,9 @@ int ReplaySimulation::simulateReplaysInThisProcess(const std::vector<AsciiString
 		printf("Total Time: %d:%02d:%02d\n", realTime/60/60, realTime/60%60, realTime%60);
 		fflush(stdout);
 	}
+
+	if (dumpFile)
+		fclose(dumpFile);
 
 	return numErrors != 0 ? 1 : 0;
 }
