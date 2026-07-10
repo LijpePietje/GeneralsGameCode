@@ -1,0 +1,2126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>WorldBuilder ZH</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <canvas id="map-canvas"></canvas>
+
+  <div id="wb-overlay">
+    <div id="wb-overlay-inner">
+      <div class="wb-spinner"></div>
+      <div id="wb-overlay-text">WorldBuilder starten...</div>
+    </div>
+  </div>
+
+  <!-- ── Map Setup Modal (obj-picker style) ────────────────────────── -->
+  <div id="modal-setup" class="hidden">
+    <div id="modal-setup-box">
+
+      <!-- Header -->
+      <div id="modal-setup-header">
+        <span id="modal-setup-title">Player List</span>
+        <div id="modal-setup-tabs">
+          <button class="ms-tab active" data-mtab="players">Players</button>
+          <button class="ms-tab"        data-mtab="teams">Teams</button>
+        </div>
+        <button id="btn-modal-setup-close">✕</button>
+      </div>
+
+      <!-- ── Players tab ──────────────────────────────────────────── -->
+      <div class="ms-tab-body" id="mtab-players">
+        <div class="ms-split">
+
+          <!-- Left column: player list + actions -->
+          <div class="ms-col-left">
+            <label class="ms-mission-toggle">
+              <input type="checkbox" id="ms-mission-mode"> Mission map
+            </label>
+            <div class="ms-list-box" id="ms-player-list"></div>
+            <div class="ms-col-actions">
+              <button class="ms-btn" id="btn-ms-new-player">New Player</button>
+              <button class="ms-btn danger" id="btn-ms-remove-player">Remove Player</button>
+              <button class="ms-btn primary" id="btn-ms-add-skirmish" style="margin-top:6px;width:100%">Add Skirmish Players</button>
+              <div id="ms-skirmish-feedback" class="feedback-text"></div>
+            </div>
+          </div>
+
+          <!-- Right column: player detail -->
+          <div class="ms-col-right" id="ms-player-detail" style="display:none">
+
+            <div class="ms-field-row">
+              <span class="ms-label">Player Name</span>
+              <span class="ms-value-static" id="ms-p-name"></span>
+            </div>
+
+            <div class="ms-field-row">
+              <span class="ms-label">Player Display Name</span>
+              <input type="text" class="ms-input" id="ms-p-displayname">
+            </div>
+
+            <div class="ms-field-row">
+              <label class="ms-checkbox-label">
+                <input type="checkbox" id="ms-p-human"> Is Player computer-controlled?
+              </label>
+            </div>
+
+            <div class="ms-field-row">
+              <span class="ms-label">Faction</span>
+              <select class="ms-input" id="ms-p-faction">
+                <option value="">—</option>
+                <option value="FactionCivilian">Civilian</option>
+                <option value="FactionAmerica">America</option>
+                <option value="FactionChina">China</option>
+                <option value="FactionGLA">GLA</option>
+                <option value="FactionAmericaAirForceGeneral">Air Force General</option>
+                <option value="FactionAmericaLaserGeneral">Laser General</option>
+                <option value="FactionAmericaSuperWeaponGeneral">Super Weapon General</option>
+                <option value="FactionChinaTankGeneral">Tank General</option>
+                <option value="FactionChinaNukeGeneral">Nuke General</option>
+                <option value="FactionChinaInfantryGeneral">Infantry General</option>
+                <option value="FactionGLADemolitionGeneral">Demolition General</option>
+                <option value="FactionGLAToxinGeneral">Toxin General</option>
+                <option value="FactionGLAStealthGeneral">Stealth General</option>
+              </select>
+            </div>
+
+            <div class="ms-field-row ms-mission-only">
+              <span class="ms-label">Color</span>
+              <select class="ms-input" id="ms-p-color" style="width:140px" disabled>
+                <option value="">— default —</option>
+                <option value="white">White</option>
+                <option value="red">Red</option>
+                <option value="blue">Blue</option>
+                <option value="green">Green</option>
+                <option value="orange">Orange</option>
+                <option value="gray">Gray</option>
+                <option value="green2">Green 2</option>
+                <option value="purple">Purple</option>
+              </select>
+            </div>
+
+            <div class="ms-field-row ms-mission-only">
+              <span class="ms-label">Start Money</span>
+              <input type="number" class="ms-input" id="ms-p-money" value="10000" style="width:120px" disabled>
+            </div>
+
+            <!-- Relations — Allies + Enemies -->
+            <div class="ms-relations-2panel">
+              <div class="ms-rel-box">
+                <div class="ms-rel-box-label">Allies</div>
+                <div class="ms-rel-list" id="ms-allies-list"></div>
+              </div>
+              <div class="ms-rel-box">
+                <div class="ms-rel-box-label">Enemies</div>
+                <div class="ms-rel-list" id="ms-enemies-list"></div>
+              </div>
+            </div>
+
+            <div class="ms-actions-row">
+              <button class="ms-btn primary" id="btn-ms-player-save">OK</button>
+              <div id="ms-player-feedback" class="feedback-text" style="margin-left:8px"></div>
+            </div>
+          </div>
+
+          <div class="ms-col-right ms-placeholder" id="ms-player-empty">Select a player</div>
+        </div>
+      </div>
+
+      <!-- ── Teams tab ────────────────────────────────────────────── -->
+      <div class="ms-tab-body hidden" id="mtab-teams">
+        <div class="ms-split">
+
+          <!-- Left column: players (team owners) -->
+          <div class="ms-col-left">
+            <div class="ms-list-box" id="ms-tp-list"></div>
+          </div>
+
+          <!-- Right column state 1: teams of the selected player -->
+          <div class="ms-col-right" id="ms-team-overview" style="display:none">
+            <div style="flex-shrink:0;display:flex;align-items:center;gap:8px">
+              <span id="ms-team-overview-title" style="font-size:13px;font-weight:600">Teams</span>
+              <span class="ms-li-sub" id="ms-team-overview-count"></span>
+              <button class="ms-btn primary" id="btn-ms-team-new" style="margin-left:auto">+ New Team</button>
+            </div>
+            <input type="text" class="ms-search" id="ms-team-search" placeholder="Filter teams..." style="margin-top:10px;flex-shrink:0">
+            <div class="ms-list-box" id="ms-team-list" style="margin-top:6px"></div>
+          </div>
+
+          <!-- Right column state 2: team setup (detail) -->
+          <div class="ms-col-right" id="ms-team-detail" style="display:none">
+
+            <!-- Back to team overview -->
+            <div style="flex-shrink:0;display:flex;align-items:center;gap:8px;margin-bottom:8px">
+              <button class="ms-btn" id="btn-ms-team-back">&larr; Teams</button>
+              <span class="ms-li-sub" id="ms-team-back-label"></span>
+            </div>
+
+            <!-- Inner tab bar -->
+            <div class="ms-inner-tabs">
+              <button class="ms-inner-tab active" data-ttab="identity">Identity</button>
+              <button class="ms-inner-tab" data-ttab="reinforce">Reinforce</button>
+              <button class="ms-inner-tab" data-ttab="behavior">Behavior</button>
+              <button class="ms-inner-tab" data-ttab="generic">Generic</button>
+              <button class="ms-inner-tab" data-ttab="objprops">Obj Props</button>
+            </div>
+
+            <!-- ── IDENTITY ──────────────────────────────────── -->
+            <div class="ms-inner-body" id="ttab-identity">
+              <div class="ms-field-row">
+                <span class="ms-label">Name</span>
+                <input type="text" class="ms-input" id="ms-t-name" placeholder="teamGLAWave1" style="flex:1">
+                <span class="ms-label" style="margin-left:8px">Max Qty <span class="ms-help" title="Maximum concurrent instances of this team. 1 = only one at a time.">?</span></span>
+                <input type="number" class="ms-input" id="ms-t-maxinst" value="1" min="1" style="width:55px">
+              </div>
+              <div class="ms-field-row">
+                <span class="ms-label">Owner</span>
+                <select class="ms-input" id="ms-t-owner" style="flex:1"></select>
+              </div>
+              <div class="ms-field-row">
+                <span class="ms-label">Home Position <span class="ms-help" title="Waypoint name where the team spawns. Must exist on the map.">?</span></span>
+                <input type="text" class="ms-input" id="ms-t-home" placeholder="SpawnPoint_1" style="flex:1">
+              </div>
+
+              <div class="ms-group-label">Production <span class="ms-help" title="Controls when and how the AI automatically rebuilds this team.">?</span></div>
+              <div class="ms-field-row ms-indent">
+                <span class="ms-label">Condition <span class="ms-help" title="Script condition that must be true for the AI to start building this team. Empty = always build.">?</span></span>
+                <input type="text" class="ms-input" id="ms-t-prod-cond" placeholder="<none>" style="flex:1">
+              </div>
+              <div class="ms-field-row ms-indent">
+                <label class="ms-checkbox-label"><input type="checkbox" id="ms-t-exec-actions"> Execute associated actions <span class="ms-help" title="Run any script actions attached to the condition when production triggers.">?</span></label>
+              </div>
+              <div class="ms-field-row ms-indent" style="gap:6px">
+                <span class="ms-label" style="width:auto">Priority <span class="ms-help" title="AI build priority. Higher value = team is built before lower-priority teams.">?</span></span>
+                <input type="number" class="ms-input" id="ms-t-priority" value="0" style="width:52px">
+                <span class="ms-label" style="width:auto">+Succ <span class="ms-help" title="Priority bonus when the team successfully builds.">?</span></span>
+                <input type="number" class="ms-input" id="ms-t-priority-suc" value="0" style="width:52px">
+                <span class="ms-label" style="width:auto">-Fail <span class="ms-help" title="Priority penalty when building fails.">?</span></span>
+                <input type="number" class="ms-input" id="ms-t-priority-fail" value="0" style="width:52px">
+              </div>
+              <div class="ms-field-row ms-indent">
+                <span class="ms-label">Build for <span class="ms-help" title="How many game frames to keep trying to build this team. 0 = try forever.">?</span></span>
+                <input type="number" class="ms-input" id="ms-t-build-frames" value="0" style="width:65px">
+                <span style="font-size:11px;color:var(--text-hint);margin-left:4px">frames</span>
+              </div>
+
+              <div class="ms-group-label" style="margin-top:8px">Units <span class="ms-help" title="Up to 7 unit types. Min = minimum count to build. Max = maximum count. Type = internal game object name (e.g. GLAInfantryRPGTrooper).">?</span></div>
+              <div class="ms-unit-header"><span style="width:52px;flex-shrink:0">Min</span><span style="width:52px;flex-shrink:0">Max</span><span style="flex:1">Unit Type (click to pick)</span></div>
+              <div id="ms-t-units"></div>
+              <button class="ms-btn primary" id="btn-ms-t-add-unit" style="margin-top:4px;font-size:10px">+ Add slot</button>
+
+              <div class="ms-group-label" style="margin-top:10px">Recruitment</div>
+              <div class="ms-field-row">
+                <label class="ms-checkbox-label"><input type="checkbox" id="ms-t-autoreinforce"> Automatically reinforce whenever possible <span class="ms-help" title="AI replaces destroyed units continuously without waiting for full team destruction.">?</span></label>
+              </div>
+              <div class="ms-field-row">
+                <label class="ms-checkbox-label"><input type="checkbox" id="ms-t-ai-recruit"> Team members are AI Recruitable <span class="ms-help" title="Other AI teams can pull units from this team when needed.">?</span></label>
+              </div>
+              <div class="ms-field-row">
+                <label class="ms-checkbox-label"><input type="checkbox" id="ms-t-singleton"> Team created once and only once <span class="ms-help" title="Team is built exactly once, never rebuilt. Use for boss waves or scripted one-time events.">?</span></label>
+              </div>
+
+              <div class="ms-group-label" style="margin-top:10px">Description</div>
+              <textarea class="ms-input" id="ms-t-desc" rows="2" style="width:100%;resize:vertical;margin-top:4px" placeholder="Optional notes..."></textarea>
+            </div>
+
+            <!-- ── REINFORCEMENT ─────────────────────────────── -->
+            <div class="ms-inner-body hidden" id="ttab-reinforce">
+              <div class="ms-group-label">If reinforcing, then: <span class="ms-help" title="Used when the team is delivered by transport vehicle rather than spawning directly.">?</span></div>
+              <div class="ms-field-row">
+                <label class="ms-checkbox-label"><input type="checkbox" id="ms-t-deploy-by-en"> Deploy by <span class="ms-help" title="Deliver team via this transport unit type.">?</span></label>
+                <input type="text" class="ms-input" id="ms-t-transport" placeholder="AmericaChinook" style="flex:1;margin-left:6px">
+              </div>
+              <div class="ms-field-row ms-indent">
+                <label class="ms-checkbox-label"><input type="checkbox" id="ms-t-transports-exit"> Transports exit map after unloading <span class="ms-help" title="Transport drives/flies off the map edge after dropping units off.">?</span></label>
+              </div>
+              <div class="ms-field-row" style="margin-top:8px">
+                <span class="ms-label">Start at waypoint <span class="ms-help" title="Where the transport enters the map, or where the team spawns if no transport.">?</span></span>
+                <input type="text" class="ms-input" id="ms-t-reinf-origin" placeholder="<none>" style="flex:1">
+              </div>
+              <div class="ms-field-row">
+                <label class="ms-checkbox-label"><input type="checkbox" id="ms-t-starts-full"> Load members into transports <span class="ms-help" title="Units are pre-loaded in the transport when it enters the map.">?</span></label>
+              </div>
+
+              <div class="ms-group-label" style="margin-top:14px">Veterancy Level <span class="ms-help" title="Starting experience level for all units in this team. Higher veterancy = better accuracy, HP, etc.">?</span></div>
+              <select class="ms-input" id="ms-t-veterancy" style="width:150px;margin-top:4px">
+                <option value="0">Normal</option>
+                <option value="1">Veteran</option>
+                <option value="2">Elite</option>
+                <option value="3">Heroic</option>
+              </select>
+            </div>
+
+            <!-- ── BEHAVIOR ──────────────────────────────────── -->
+            <div class="ms-inner-body hidden" id="ttab-behavior">
+              <div class="ms-group-label">Behavior Script Triggers <span class="ms-help" title="Scripts called automatically when these events happen to the team. Enter the exact script name.">?</span></div>
+              <div class="ms-field-row">
+                <span class="ms-label">On Create <span class="ms-help" title="Runs once when the team is first created. Good for spawn announcements or initial orders.">?</span></span>
+                <input type="text" class="ms-input" id="ms-t-s-create" placeholder="<none>" style="flex:1">
+              </div>
+              <div class="ms-field-row">
+                <span class="ms-label">On Enemy Sighted <span class="ms-help" title="Runs when any unit in the team spots an enemy for the first time.">?</span></span>
+                <input type="text" class="ms-input" id="ms-t-s-enemy" placeholder="<none>" style="flex:1">
+              </div>
+              <div class="ms-field-row">
+                <span class="ms-label">On All Clear <span class="ms-help" title="Runs when the team has no visible threats nearby.">?</span></span>
+                <input type="text" class="ms-input" id="ms-t-s-allclear" placeholder="<none>" style="flex:1">
+              </div>
+              <div class="ms-field-row" style="gap:4px">
+                <span class="ms-label">On Destroyed % <span class="ms-help" title="Runs when this percentage of the team is destroyed. 50 = when half the units are gone.">?</span></span>
+                <input type="number" class="ms-input" id="ms-t-destroyed-pct" value="50" min="0" max="100" style="width:48px">
+                <input type="text" class="ms-input" id="ms-t-s-destroyed" placeholder="<none>" style="flex:1">
+              </div>
+              <div class="ms-field-row">
+                <span class="ms-label">On Idle <span class="ms-help" title="Runs repeatedly while the team has no orders. Useful for patrol or hunt scripts.">?</span></span>
+                <input type="text" class="ms-input" id="ms-t-s-idle" placeholder="<none>" style="flex:1">
+              </div>
+              <div class="ms-field-row">
+                <span class="ms-label">On Unit Destroyed <span class="ms-help" title="Runs each time an individual unit in the team is destroyed.">?</span></span>
+                <input type="text" class="ms-input" id="ms-t-s-unitdest" placeholder="<none>" style="flex:1">
+              </div>
+
+              <div class="ms-group-label" style="margin-top:12px">Behavior Options</div>
+              <div class="ms-field-row">
+                <label class="ms-checkbox-label"><input type="checkbox" id="ms-t-transports-return"> Transports return to base after unloading <span class="ms-help" title="Transport goes back to its home waypoint after dropping the team off.">?</span></label>
+              </div>
+              <div class="ms-field-row">
+                <label class="ms-checkbox-label"><input type="checkbox" id="ms-t-avoid-threats"> Team avoids threats <span class="ms-help" title="Team tries to route around heavy enemy concentrations instead of engaging directly.">?</span></label>
+              </div>
+              <div class="ms-field-row" style="margin-top:6px">
+                <span class="ms-label">Initial Team Behavior <span class="ms-help" title="Starting AI stance. Sleep = completely inactive. Passive = moves but won't attack. Normal = standard AI. Alert = attacks on sight. Aggressive = actively hunts enemies.">?</span></span>
+                <select class="ms-input" id="ms-t-aggressiveness" style="flex:1">
+                  <option value="-2">Sleep</option>
+                  <option value="-1">Passive</option>
+                  <option value="0" selected>Normal</option>
+                  <option value="1">Alert</option>
+                  <option value="2">Aggressive</option>
+                </select>
+              </div>
+              <div class="ms-field-row" style="margin-top:6px">
+                <label class="ms-checkbox-label" style="flex-wrap:wrap"><input type="checkbox" id="ms-t-common-target"> Focus on single target (Hard/Brutal only, never Normal) <span class="ms-help" title="On Hard and Brutal difficulty: all units focus fire on one target at a time. Has no effect on Normal difficulty.">?</span></label>
+              </div>
+            </div>
+
+            <!-- ── GENERIC ────────────────────────────────────── -->
+            <div class="ms-inner-body hidden" id="ttab-generic">
+              <div class="ms-group-label">Script Hooks <span class="ms-help" title="Up to 16 named scripts attached to this team. The game calls these in order for custom AI sequences. Most maps only use Script 1.">?</span></div>
+              <div id="ms-t-generic-scripts"></div>
+            </div>
+
+            <!-- ── COMMON OBJECT PROPERTIES ───────────────────── -->
+            <div class="ms-inner-body hidden" id="ttab-objprops">
+              <div class="ms-group-label">Override Unit Properties <span class="ms-help" title="These override the default INI properties for every unit spawned in this team.">?</span></div>
+              <div class="ms-field-row">
+                <span class="ms-label">Initial Health % <span class="ms-help" title="Units spawn at this health percentage. 100 = full health, 50 = half health.">?</span></span>
+                <input type="number" class="ms-input" id="ms-t-obj-health" placeholder="100" min="0" max="100" style="width:65px">
+              </div>
+              <div class="ms-field-row">
+                <span class="ms-label">Max Hitpoints <span class="ms-help" title="Override max HP for all units. -1 or empty = use the default from game INI files.">?</span></span>
+                <input type="number" class="ms-input" id="ms-t-obj-maxhp" placeholder="-1" style="width:75px">
+              </div>
+              <div class="ms-field-row" style="flex-wrap:wrap;gap:8px;margin-top:4px">
+                <label class="ms-checkbox-label"><input type="checkbox" id="ms-t-obj-enabled" checked> Enabled <span class="ms-help" title="Units are active and can act. Unchecked = units start inactive.">?</span></label>
+                <label class="ms-checkbox-label"><input type="checkbox" id="ms-t-obj-powered"> Powered <span class="ms-help" title="Units have power (relevant for buildings).">?</span></label>
+                <label class="ms-checkbox-label"><input type="checkbox" id="ms-t-obj-unsellable"> Unsellable <span class="ms-help" title="AI cannot sell these units/buildings.">?</span></label>
+                <label class="ms-checkbox-label"><input type="checkbox" id="ms-t-obj-selectable" checked> Selectable <span class="ms-help" title="Player can click-select these units.">?</span></label>
+                <label class="ms-checkbox-label"><input type="checkbox" id="ms-t-obj-indestructible"> Indestructible <span class="ms-help" title="Units cannot be destroyed. Use for scripted units that must survive cutscenes or events.">?</span></label>
+                <label class="ms-checkbox-label"><input type="checkbox" id="ms-t-obj-ai-recruit"> AI Recruitable <span class="ms-help" title="Other AI teams can take units from this team.">?</span></label>
+              </div>
+              <div class="ms-field-row" style="margin-top:8px">
+                <span class="ms-label">Aggressiveness <span class="ms-help" title="Per-unit stance override.">?</span></span>
+                <select class="ms-input" id="ms-t-obj-aggr" style="flex:1">
+                  <option value="">— default —</option>
+                  <option value="-2">Sleep</option><option value="-1">Passive</option>
+                  <option value="0">Normal</option><option value="1">Alert</option><option value="2">Aggressive</option>
+                </select>
+              </div>
+              <div class="ms-field-row">
+                <span class="ms-label">Veterancy <span class="ms-help" title="Per-unit veterancy override (independent of Reinforcement tab).">?</span></span>
+                <select class="ms-input" id="ms-t-obj-vet" style="flex:1">
+                  <option value="">— default —</option>
+                  <option value="0">Normal</option><option value="1">Veteran</option>
+                  <option value="2">Elite</option><option value="3">Heroic</option>
+                </select>
+              </div>
+              <div class="ms-field-row">
+                <span class="ms-label">Weather <span class="ms-help" title="Override the weather condition units appear under. Leave as map default unless scripting weather effects.">?</span></span>
+                <select class="ms-input" id="ms-t-obj-weather" style="flex:1">
+                  <option value="0">Map default</option><option value="1">Normal</option><option value="2">Snow</option>
+                </select>
+              </div>
+              <div class="ms-field-row">
+                <span class="ms-label">Time <span class="ms-help" title="Override time-of-day for units. Leave as map default unless scripting day/night cycles.">?</span></span>
+                <select class="ms-input" id="ms-t-obj-time" style="flex:1">
+                  <option value="0">Map default</option><option value="1">Daytime</option><option value="2">Nighttime</option>
+                </select>
+              </div>
+              <div class="ms-group-label" style="margin-top:8px">Distances</div>
+              <div class="ms-field-row">
+                <span class="ms-label">Stopping Distance <span class="ms-help" title="How close a vehicle gets to its target before stopping. In world units.">?</span></span>
+                <input type="number" class="ms-input" id="ms-t-obj-stop" placeholder="0" style="width:70px">
+              </div>
+              <div class="ms-field-row">
+                <span class="ms-label">Targeting Distance <span class="ms-help" title="Override how far units scan for targets.">?</span></span>
+                <input type="number" class="ms-input" id="ms-t-obj-target" placeholder="0" style="width:70px">
+              </div>
+              <div class="ms-field-row">
+                <span class="ms-label">Shroud Clearing <span class="ms-help" title="How far units clear the fog of war. 0 = use INI default.">?</span></span>
+                <input type="number" class="ms-input" id="ms-t-obj-shroud" placeholder="0" style="width:70px">
+              </div>
+            </div>
+
+            <!-- Always-visible actions -->
+            <div class="ms-actions-row" style="flex-shrink:0;padding-top:10px;margin-top:auto;border-top:1px solid rgba(255,255,255,0.06)">
+              <button class="ms-btn primary" id="btn-ms-team-save">Save</button>
+              <button class="ms-btn danger"  id="btn-ms-team-del">Delete</button>
+              <div id="ms-team-feedback" class="feedback-text" style="margin-left:8px"></div>
+            </div>
+          </div>
+
+          <div class="ms-col-right ms-placeholder" id="ms-team-empty">Select a player to see its teams</div>
+        </div>
+      </div>
+
+    </div><!-- #modal-setup-box -->
+  </div><!-- #modal-setup -->
+
+  <!-- Custom title bar -->
+  <div id="title-bar">
+    <div id="title-bar-drag">
+      <div id="app-title">
+        <span class="title-dot"></span>
+        <span id="map-name">desert_stronghold.map</span>
+        <span class="title-unsaved" id="unsaved-dot">●</span>
+      </div>
+    </div>
+    <div id="title-actions">
+      <button class="title-btn" id="btn-new"    title="New Map">📄</button>
+      <button class="title-btn" id="btn-open"   title="Open Map">📂</button>
+      <div class="title-sep"></div>
+      <button class="title-btn" id="btn-undo" title="Undo (Ctrl+Z)">↩</button>
+      <button class="title-btn" id="btn-redo" title="Redo (Ctrl+Y)">↪</button>
+      <div class="title-sep"></div>
+      <button class="title-btn" id="btn-save"   title="Save (Ctrl+S)">💾</button>
+      <button class="title-btn" id="btn-saveas" title="Save As…">↗</button>
+      <div class="title-sep"></div>
+      <button class="title-btn win-btn" id="btn-min">─</button>
+      <button class="title-btn win-btn" id="btn-max">□</button>
+      <button class="title-btn win-btn close" id="btn-close">✕</button>
+    </div>
+  </div>
+
+  <!-- Right side panel (slides in) -->
+  <div id="side-panel" class="open">
+    <div id="panel-header">
+      <div class="panel-title-row">
+        <span class="panel-icon" id="panel-icon">⬛</span>
+        <span class="panel-title" id="panel-title">Terrain & Texture Painter</span>
+        <button class="panel-help-btn" id="panel-help-btn" title="Help">?</button>
+      </div>
+    </div>
+
+    <!-- ── ShapeFill panel ──────────────────────────────────── -->
+    <div id="panel-shapefill" class="tool-panel">
+      <div id="view-3d-notice">
+        <div class="notice-icon">🔒</div>
+        <div class="notice-text">Tools werken alleen in 2D bovenaanzicht</div>
+        <button id="btn-switch-2d">Schakel naar 2D</button>
+      </div>
+
+      <div id="panel-content">
+        <div class="panel-section">
+          <div class="section-label">DRAW MODE</div>
+          <div class="mode-grid-2col" id="mode-grid">
+            <div class="mode-col">
+              <button class="mode-btn active" data-mode="Rect"><span class="mode-icon">▪</span><span>Rect</span></button>
+              <button class="mode-btn" data-mode="Circle"><span class="mode-icon">●</span><span>Circle</span></button>
+              <button class="mode-btn" data-mode="Poly"><span class="mode-icon">⬡</span><span>Poly</span></button>
+              <button class="mode-btn" data-mode="Line"><span class="mode-icon">╱</span><span>Line</span></button>
+            </div>
+            <div class="mode-col mode-col-right">
+              <button class="mode-btn" data-mode="Select"><span class="mode-icon">↖</span><span>Select</span></button>
+              <button class="mode-btn" data-mode="Edit"><span class="mode-icon">◈</span><span>Edit</span></button>
+              <button class="mode-btn" data-mode="Fill"><span class="mode-icon">⬛</span><span>Fill</span></button>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-divider"></div>
+
+        <div class="panel-section">
+          <div class="section-label">HEIGHT</div>
+          <div class="hint-text" id="sf-ground-hint" title="Most common terrain height on this map (= the map's default level). Click to set Inner Height to it." style="text-align:left;margin:0 0 6px 2px;cursor:pointer">Ground level: —</div>
+          <div class="slider-row">
+            <span class="slider-label">Inner Height</span>
+            <input type="range" class="wb-slider" min="0" max="80" value="10" id="sl-inner-height">
+            <span class="slider-val" id="val-inner-height">10</span>
+          </div>
+          <div class="hint-text" id="sf-height-delta" style="text-align:left;margin:-2px 0 6px 2px"></div>
+          <div class="slider-row">
+            <span class="slider-label">Border Width</span>
+            <input type="range" class="wb-slider" min="0" max="30" value="5" id="sl-border-width">
+            <span class="slider-val" id="val-border-width">5</span>
+          </div>
+        </div>
+
+        <div class="panel-divider"></div>
+
+        <div class="panel-section">
+          <div class="section-label">TEXTURE</div>
+          <div class="tex-row">
+            <span class="slider-label">Fill Tex</span>
+            <button class="tex-btn" id="btn-inner-tex">
+              <span class="tex-swatch" id="swatch-inner" style="background:#888"></span>
+              <span id="label-inner-tex">...</span>
+              <span class="tex-arrow">›</span>
+            </button>
+          </div>
+          <div class="tex-row">
+            <span class="slider-label">Border Tex</span>
+            <button class="tex-btn" id="btn-border-tex">
+              <span class="tex-swatch" id="swatch-border" style="background:#555"></span>
+              <span id="label-border-tex">...</span>
+              <span class="tex-arrow">›</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="panel-divider"></div>
+
+        <!-- Collapsed by default: blends + session persistence -->
+        <div class="panel-section" style="padding-bottom:6px">
+          <button class="action-btn" id="sf-extra-toggle" style="width:100%">Extra Options ▾</button>
+        </div>
+        <div id="sf-extra-box" style="display:none">
+          <!-- Blend groups for shape modes (hidden in Fill mode) -->
+          <div id="blend-shape-section">
+            <div class="panel-section">
+              <div class="section-label">INNER BLEND</div>
+              <div class="seg-btn-group" id="blend-inner">
+                <button class="seg-btn active" data-val="none">None</button>
+                <button class="seg-btn" data-val="out">Out</button>
+                <button class="seg-btn" data-val="in">In</button>
+              </div>
+            </div>
+            <div class="panel-section" style="padding-top:6px">
+              <div class="section-label">OUTER BLEND</div>
+              <div class="seg-btn-group" id="blend-border">
+                <button class="seg-btn active" data-val="none">None</button>
+                <button class="seg-btn" data-val="out">Out</button>
+                <button class="seg-btn" data-val="in">In</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Fill blend: only shown in Fill mode -->
+          <div id="blend-fill-section" style="display:none">
+            <div class="panel-section">
+              <div class="section-label">FILL BLEND</div>
+              <div class="seg-btn-group" id="blend-fill">
+                <button class="seg-btn active" data-val="none">None</button>
+                <button class="seg-btn" data-val="out">Out</button>
+                <button class="seg-btn" data-val="in">In</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel-section" style="padding-top:6px">
+            <div class="checkbox-row">
+              <label class="wb-checkbox">
+                <input type="checkbox" id="chk-auto-save">
+                <span class="checkmark"></span>
+                Save shapes with map (.wbsession)
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-divider"></div>
+
+        <div class="panel-section">
+          <div class="section-label">SHAPES <span class="count-badge" id="shapes-count">0</span></div>
+          <div class="shapes-list" id="shapes-list"></div>
+        </div>
+
+        <div class="panel-section" id="lines-section" style="display:none">
+          <div class="section-label">LINES <span class="count-badge" id="lines-count">0</span></div>
+          <div class="shapes-list" id="lines-list"></div>
+        </div>
+
+        <div class="panel-divider"></div>
+
+        <div class="panel-section">
+          <!-- Contextual: shown only when drawing polygon with ≥3 points -->
+          <div id="ctx-poly-btns" style="display:none">
+            <div class="action-row">
+              <button class="action-btn primary full-width" id="btn-finish-poly">Finish Polygon</button>
+            </div>
+          </div>
+
+          <!-- Contextual: shown only in Line mode -->
+          <div id="ctx-line-btns" style="display:none">
+            <div class="action-row">
+              <button class="action-btn primary" id="btn-finish-line">Finish Line</button>
+              <button class="action-btn" id="btn-clear-lines">Clear Lines</button>
+            </div>
+          </div>
+
+          <div class="action-row">
+            <button class="action-btn primary" id="btn-apply">Apply</button>
+            <button class="action-btn" id="btn-duplicate">Duplicate</button>
+          </div>
+          <div class="action-row">
+            <button class="action-btn" id="btn-flip-h">Flip H</button>
+            <button class="action-btn" id="btn-flip-v">Flip V</button>
+            <button class="action-btn" id="btn-rotate">Rotate ↻</button>
+            <button class="action-btn danger" id="btn-delete">Delete</button>
+          </div>
+          <div class="hint-text">Ctrl+Z undo · Ctrl+Y redo · DEL delete</div>
+        </div>
+      </div><!-- #panel-content -->
+    </div><!-- #panel-shapefill -->
+
+    <!-- ── Map Setup panel ──────────────────────────────────── -->
+    <div id="panel-mapsetup" class="tool-panel" style="display:none">
+
+      <div class="panel-section">
+        <div class="section-label">MAP SIZE</div>
+        <div class="map-size-row">
+          <span class="map-size-badge" id="ms-playable-size">— × —</span>
+          <span class="map-size-sub"   id="ms-border-info"></span>
+        </div>
+        <div class="map-op-row">
+          <button class="map-op-btn" id="ms-btn-new"    title="Create a new empty map">📄 New Map</button>
+          <button class="map-op-btn" id="ms-btn-resize" title="Resize the current map">↔ Resize</button>
+        </div>
+      </div>
+
+      <div class="panel-divider"></div>
+
+      <div class="panel-section">
+        <div class="section-label">MAP MODE</div>
+        <div class="seg-btn-group" id="ms-mode-group">
+          <button class="seg-btn active" data-msmode="skirmish">Skirmish</button>
+          <button class="seg-btn"        data-msmode="coop">Co-op</button>
+          <button class="seg-btn"        data-msmode="mission">Mission</button>
+        </div>
+      </div>
+
+      <div class="panel-divider"></div>
+
+      <!-- Skirmish section -->
+      <div id="ms-section-skirmish">
+        <div class="panel-section">
+          <div class="section-label">PLAYER COUNT</div>
+          <div class="seg-btn-group" style="flex-wrap:wrap;gap:4px">
+            <button class="seg-btn" data-pvp="1v1">1v1</button>
+            <button class="seg-btn active" data-pvp="2v2">2v2</button>
+            <button class="seg-btn" data-pvp="3v3">3v3</button>
+            <button class="seg-btn" data-pvp="4v4">4v4</button>
+            <button class="seg-btn" data-pvp="ffa">FFA</button>
+          </div>
+        </div>
+        <div class="panel-section" style="padding-top:4px">
+          <div class="ms-status-row">
+            <span class="ms-status-icon" id="ms-starts-icon">⚠</span>
+            <span id="ms-starts-label">— player starts placed</span>
+          </div>
+          <button class="action-btn" id="ms-btn-place-starts" style="margin-top:8px;width:100%">Place Player Starts ▾</button>
+          <div id="ms-ps-box" style="display:none;margin-top:6px">
+            <div id="ms-ps-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:6px"></div>
+            <div id="ms-ps-hint" class="hint-text" style="display:none;text-align:center"></div>
+            <button id="ms-ps-cancel" class="action-btn" onclick="cancelPlayerStartPlace()" style="display:none;width:100%;margin-top:4px">Cancel</button>
+          </div>
+          <button class="action-btn" id="ms-btn-income" style="margin-top:8px;width:100%">Income ▾</button>
+          <div id="ms-inc-box" style="display:none;margin-top:6px">
+            <div class="ms-opt-grid" data-group="income"></div>
+            <div id="ms-inc-hint" class="hint-text" style="display:none;text-align:center"></div>
+            <button id="ms-inc-cancel" class="action-btn" onclick="msCancelQuickPlace()" style="display:none;width:100%;margin-top:4px">Cancel</button>
+          </div>
+          <button class="action-btn" id="ms-btn-extras" style="margin-top:8px;width:100%">Extras ▾</button>
+          <div id="ms-ext-box" style="display:none;margin-top:6px">
+            <div class="ms-opt-grid" data-group="extras"></div>
+            <div id="ms-ext-hint" class="hint-text" style="display:none;text-align:center"></div>
+            <button id="ms-ext-cancel" class="action-btn" onclick="msCancelQuickPlace()" style="display:none;width:100%;margin-top:4px">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Co-op Defense section - WIP, not wired up to a finished flow yet.
+           Original markup kept below (commented) so this is easy to restore. -->
+      <div id="ms-section-coop" style="display:none">
+        <div class="panel-section">
+          <div class="hint-text" style="text-align:center;padding:24px 0">Quick setup - coming soon</div>
+        </div>
+      </div>
+      <!--
+      <div id="ms-section-coop-wip" style="display:none">
+        <div class="panel-section">
+          <div class="section-label">SUBTYPE</div>
+          <div class="seg-btn-group" style="flex-wrap:wrap;gap:4px">
+            <button class="seg-btn active" data-coop="aod">AOD</button>
+            <button class="seg-btn"        data-coop="zombie">Zombie</button>
+            <button class="seg-btn"        data-coop="survival">Survival</button>
+            <button class="seg-btn"        data-coop="custom">Custom</button>
+          </div>
+        </div>
+        <div class="panel-divider"></div>
+        <div class="panel-section">
+          <div class="ms-status-row" style="margin-bottom:8px">
+            <span class="ms-status-icon" id="ms-coop-starts-icon">⚠</span>
+            <span id="ms-coop-starts-label">— human player starts</span>
+          </div>
+          <button class="action-btn" id="ms-coop-btn-starts" style="width:100%;margin-bottom:10px">Place Player Starts ▾</button>
+          <div id="ms-coop-ps-box" style="display:none;margin-bottom:10px">
+            <div id="ms-coop-ps-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:6px"></div>
+            <div id="ms-coop-ps-hint" class="hint-text" style="display:none;text-align:center"></div>
+            <button id="ms-coop-ps-cancel" class="action-btn" onclick="cancelPlayerStartPlace()" style="display:none;width:100%;margin-top:4px">Cancel</button>
+          </div>
+          <button class="action-btn" id="ms-coop-btn-income" style="width:100%;margin-bottom:10px">Income ▾</button>
+          <div id="ms-coop-inc-box" style="display:none;margin-bottom:10px">
+            <div class="ms-opt-grid" data-group="income"></div>
+            <div id="ms-coop-inc-hint" class="hint-text" style="display:none;text-align:center"></div>
+            <button id="ms-coop-inc-cancel" class="action-btn" onclick="msCancelQuickPlace()" style="display:none;width:100%;margin-top:4px">Cancel</button>
+          </div>
+          <button class="action-btn" id="ms-coop-btn-extras" style="width:100%;margin-bottom:10px">Extras ▾</button>
+          <div id="ms-coop-ext-box" style="display:none;margin-bottom:10px">
+            <div class="ms-opt-grid" data-group="extras"></div>
+            <div id="ms-coop-ext-hint" class="hint-text" style="display:none;text-align:center"></div>
+            <button id="ms-coop-ext-cancel" class="action-btn" onclick="msCancelQuickPlace()" style="display:none;width:100%;margin-top:4px">Cancel</button>
+          </div>
+
+          <div class="ms-status-row" style="margin-bottom:8px">
+            <span class="ms-status-icon" id="ms-losezone-icon">⚠</span>
+            <span id="ms-losezone-label">No lose zone</span>
+          </div>
+          <button class="action-btn" id="ms-btn-losezone" style="width:100%;margin-bottom:10px">Add Lose Zone →</button>
+
+          <button class="action-btn" id="ms-btn-waves" style="width:100%">Wave Script Wizard →</button>
+        </div>
+      </div>
+      -->
+
+      <!-- Mission section - WIP, not wired up to a finished flow yet. -->
+      <div id="ms-section-mission" style="display:none">
+        <div class="panel-section">
+          <div class="hint-text" style="text-align:center;padding:24px 0">Quick setup - coming soon</div>
+        </div>
+      </div>
+      <!--
+      <div id="ms-section-mission-wip" style="display:none">
+        <div class="panel-section">
+          <div class="hint-text" style="margin-bottom:12px">Mission maps are fully script-driven. Use these shortcuts to get started.</div>
+          <button class="action-btn" id="ms-mission-starts" style="width:100%;margin-bottom:6px">Set Player Start →</button>
+          <button class="action-btn" id="ms-mission-scripts" style="width:100%">Open Script Editor →</button>
+        </div>
+      </div>
+      -->
+
+    </div><!-- #panel-mapsetup -->
+
+    <!-- ── Objects panel ───────────────────────────────────── -->
+    <div id="panel-objects" class="tool-panel" style="display:none">
+      <div class="panel-section" style="padding-bottom:6px">
+        <button class="browse-btn" id="btn-obj-expand" title="Browse the full object catalog by faction">🗂&nbsp; Browse All Objects</button>
+        <input type="text" class="wb-form-input wb-search" id="obj-search" placeholder="Quick search..." style="width:100%;margin-top:8px">
+      </div>
+
+      <div class="panel-divider"></div>
+
+      <div class="panel-section" style="padding-bottom:0">
+        <div class="section-label" id="obj-grid-label">RECENTLY USED</div>
+      </div>
+      <div id="obj-grid">
+        <!-- Recently used icons, or quick-search results while typing -->
+      </div>
+
+      <div class="panel-divider"></div>
+
+      <div class="panel-section">
+        <div id="obj-selected-display" class="selected-display">(nothing selected)</div>
+        <div class="hint-text" style="margin-top:4px">Click in map to place · Ctrl+Z undo</div>
+        <div id="obj-place-feedback" class="feedback-text"></div>
+      </div>
+    </div><!-- #panel-objects -->
+
+    <!-- ── Nature / Vegetation panel ────────────────────── -->
+    <div id="panel-nature" class="tool-panel" style="display:none">
+
+      <!-- Type picker -->
+      <div class="panel-section" style="padding-bottom:6px">
+        <input type="text" class="wb-form-input wb-search" id="nature-search" placeholder="Search vegetation..." style="width:100%">
+      </div>
+      <div class="panel-divider"></div>
+      <div id="nature-grid"></div>
+      <div class="panel-divider"></div>
+
+      <!-- Selected type -->
+      <div class="panel-section">
+        <div id="nature-selected-display" class="selected-display">(nothing selected)</div>
+      </div>
+      <div class="panel-divider"></div>
+
+      <!-- Grove brush controls -->
+      <div class="panel-section">
+        <div class="grove-row">
+          <span class="grove-label">Brush size</span>
+          <input type="range" id="grove-radius" min="20" max="300" value="80" step="5" class="grove-slider">
+          <span class="grove-val" id="grove-radius-val">80</span>
+        </div>
+        <div class="grove-row" style="margin-top:6px">
+          <span class="grove-label">Density</span>
+          <input type="range" id="grove-density" min="1" max="20" value="5" step="1" class="grove-slider">
+          <span class="grove-val" id="grove-density-val">~8</span>
+        </div>
+      </div>
+      <div class="panel-divider"></div>
+
+      <!-- Toggles -->
+      <div class="panel-section">
+        <div class="grove-toggles">
+          <label class="grove-toggle"><input type="checkbox" id="grove-rand-rot" checked> Random rotation</label>
+          <label class="grove-toggle"><input type="checkbox" id="grove-skip-water" checked> Skip water</label>
+          <label class="grove-toggle"><input type="checkbox" id="grove-skip-steep" checked> Skip steep</label>
+          <label class="grove-toggle"><input type="checkbox" id="grove-mix"> Mix variants</label>
+        </div>
+        <div class="hint-text" style="margin-top:6px">Drag on map to scatter · Ctrl+Z removes whole grove</div>
+      </div>
+    </div><!-- #panel-nature -->
+
+    <!-- ── Terrain panel ─────────────────────────────────── -->
+    <div id="panel-terrain" class="tool-panel" style="display:none">
+
+      <div class="panel-section">
+        <div class="terrain-tool-grid">
+
+          <button class="terrain-tool-btn active" data-tmode="raise">
+            <svg class="terrain-icon" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M16 5 L29 25 H3 Z" fill="currentColor" opacity="0.25"/>
+              <path d="M16 5 L29 25 H3 Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+              <line x1="3" y1="25" x2="29" y2="25" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <span>Raise</span>
+          </button>
+
+          <button class="terrain-tool-btn" data-tmode="lower">
+            <svg class="terrain-icon" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M3 9 Q16 28 29 9" fill="currentColor" opacity="0.25" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+              <line x1="3" y1="9" x2="29" y2="9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <span>Lower</span>
+          </button>
+
+          <button class="terrain-tool-btn" data-tmode="flatten">
+            <svg class="terrain-icon" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M3 22 L10 14 H22 L29 22" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+              <line x1="10" y1="14" x2="22" y2="14" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+              <line x1="3" y1="22" x2="29" y2="22" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="3 2"/>
+            </svg>
+            <span>Flatten</span>
+          </button>
+
+          <button class="terrain-tool-btn" data-tmode="smooth">
+            <svg class="terrain-icon" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M3 20 C7 20 7 12 16 12 C25 12 25 20 29 20" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+              <path d="M3 24 C9 22 10 15 16 15 C22 15 23 22 29 24" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity="0.4"/>
+            </svg>
+            <span>Smooth</span>
+          </button>
+
+          <button class="terrain-tool-btn" data-tmode="stamp">
+            <svg class="terrain-icon" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <ellipse cx="16" cy="13" rx="8" ry="5" fill="currentColor" opacity="0.25" stroke="currentColor" stroke-width="1.8"/>
+              <ellipse cx="16" cy="13" rx="3" ry="2" fill="currentColor"/>
+              <line x1="8" y1="24" x2="24" y2="24" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+              <line x1="16" y1="18" x2="16" y2="24" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <span>Stamp</span>
+          </button>
+
+          <button class="terrain-tool-btn" data-tmode="mesh-mold">
+            <svg class="terrain-icon" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M5 23 Q16 4 27 23" fill="currentColor" opacity="0.2" stroke="currentColor" stroke-width="1.8"/>
+              <path d="M7.5 18 Q16 11 24.5 18" stroke="currentColor" stroke-width="0.9" opacity="0.55"/>
+              <line x1="16" y1="4" x2="16" y2="23" stroke="currentColor" stroke-width="0.9" opacity="0.55"/>
+              <line x1="5" y1="23" x2="27" y2="23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <span>Mesh Mold</span>
+          </button>
+
+        </div>
+      </div>
+
+      <div class="panel-divider" id="terrain-brush-divider-0"></div>
+
+      <div class="panel-section" id="terrain-brush-section">
+        <div class="section-label">BRUSH</div>
+        <div class="slider-row">
+          <span class="slider-label">Size</span>
+          <input type="range" class="wb-slider" min="1" max="51" value="15" id="sl-terrain-size">
+          <span class="slider-val" id="val-terrain-size">15</span>
+        </div>
+        <div class="slider-row">
+          <span class="slider-label">Feather</span>
+          <input type="range" class="wb-slider" min="0" max="20" value="5" id="sl-terrain-feather">
+          <span class="slider-val" id="val-terrain-feather">5</span>
+        </div>
+        <div style="margin-top:6px">
+          <div class="seg-btn-group" id="terrain-brush-shape">
+            <button class="seg-btn active" data-val="round">Round</button>
+            <button class="seg-btn" data-val="square">Square</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-divider" id="terrain-brush-divider-1"></div>
+
+      <!-- Height section: shown for raise/lower/flatten/stamp -->
+      <div id="terrain-height-section" class="panel-section">
+        <div class="section-label" id="terrain-height-label">HEIGHT STEP</div>
+        <div class="slider-row">
+          <span class="slider-label">Value</span>
+          <input type="range" class="wb-slider" min="1" max="30" value="5" id="sl-terrain-height">
+          <input type="number" class="wb-form-input" min="1" max="30" value="5" id="num-terrain-height" style="width:52px;flex:none;text-align:right;padding:3px 5px">
+        </div>
+        <div class="hint-text" id="terrain-height-hint" style="text-align:left;margin-top:4px"></div>
+      </div>
+
+      <!-- Smooth section: only for smooth mode -->
+      <div id="terrain-smooth-section" class="panel-section" style="display:none">
+        <div class="section-label">SMOOTH</div>
+        <div class="slider-row">
+          <span class="slider-label">Rate</span>
+          <input type="range" class="wb-slider" min="1" max="10" value="3" id="sl-terrain-rate">
+          <span class="slider-val" id="val-terrain-rate">3</span>
+        </div>
+        <div class="slider-row">
+          <span class="slider-label">Radius</span>
+          <input type="range" class="wb-slider" min="1" max="5" value="2" id="sl-terrain-radius">
+          <span class="slider-val" id="val-terrain-radius">2</span>
+        </div>
+        <div class="hint-text" style="text-align:left;margin-top:4px">Size = area to smooth · Radius = how wide each point averages its neighbours · Rate = how fast the effect builds while you drag</div>
+      </div>
+
+      <div class="panel-divider" id="terrain-brush-divider-2"></div>
+
+      <div class="panel-section" id="terrain-hint-section">
+        <div class="hint-text">Click in map to edit terrain · Ctrl+Z undo</div>
+      </div>
+
+      <div class="panel-divider" id="terrain-mold-divider" style="display:none"></div>
+
+      <!-- ── Mesh Mold ── -->
+      <div class="panel-section" id="terrain-mold-section" style="display:none">
+        <div class="section-label">MESH MOLD</div>
+
+        <div class="slider-row" style="margin-bottom:6px">
+          <span class="slider-label">Mold</span>
+          <select class="wb-form-input" id="mold-select" style="flex:1;min-width:0">
+            <option value="">— loading —</option>
+          </select>
+        </div>
+
+        <div class="slider-row">
+          <span class="slider-label" style="width:54px">Scale</span>
+          <input type="range" class="wb-slider" min="10" max="1000" value="100" id="sl-mold-scale">
+          <span class="slider-val" id="val-mold-scale">100%</span>
+        </div>
+        <div class="slider-row">
+          <span class="slider-label" style="width:54px">Scale X</span>
+          <input type="range" class="wb-slider" min="10" max="400" value="100" id="sl-mold-scalex">
+          <span class="slider-val" id="val-mold-scalex">100%</span>
+        </div>
+        <div class="slider-row">
+          <span class="slider-label" style="width:54px">Scale Y</span>
+          <input type="range" class="wb-slider" min="10" max="400" value="100" id="sl-mold-scaley">
+          <span class="slider-val" id="val-mold-scaley">100%</span>
+        </div>
+        <div class="slider-row">
+          <span class="slider-label" style="width:54px">Height</span>
+          <input type="range" class="wb-slider" min="-200" max="200" value="0" id="sl-mold-height">
+          <span class="slider-val" id="val-mold-height">0</span>
+        </div>
+        <div class="slider-row">
+          <span class="slider-label" style="width:54px">Angle</span>
+          <input type="range" class="wb-slider" min="0" max="359" value="0" id="sl-mold-angle">
+          <span class="slider-val" id="val-mold-angle">0°</span>
+        </div>
+
+        <div style="margin:8px 0 4px">
+          <div class="seg-btn-group" id="mold-mode-group">
+            <button class="seg-btn active" data-mold-mode="both">Both</button>
+            <button class="seg-btn" data-mold-mode="raise">Raise only</button>
+            <button class="seg-btn" data-mold-mode="lower">Lower only</button>
+          </div>
+        </div>
+
+        <div class="slider-row" style="margin-top:8px">
+          <span class="slider-label" style="width:54px">Pos X</span>
+          <input type="number" class="wb-form-input" id="mold-pos-x" value="500" style="flex:1;min-width:0">
+        </div>
+        <div class="slider-row">
+          <span class="slider-label" style="width:54px">Pos Y</span>
+          <input type="number" class="wb-form-input" id="mold-pos-y" value="500" style="flex:1;min-width:0">
+        </div>
+
+        <div style="margin-top:10px;display:flex;gap:6px">
+          <button class="action-btn" id="mold-apply-btn" style="flex:1">Apply Mold</button>
+          <button class="action-btn" id="mold-center-btn" style="flex:none;padding:0 10px" title="Use view center as position">⊕</button>
+        </div>
+        <div class="hint-text" id="mold-hint" style="margin-top:6px;text-align:left">Select a mold · set scale/angle · click Apply</div>
+      </div>
+
+    </div><!-- #panel-terrain -->
+
+    <!-- ── Texture panel ────────────────────────────────────── -->
+    <div id="panel-texture" class="tool-panel" style="display:none">
+      <div class="panel-section">
+        <div class="section-label">TEXTURES</div>
+        <div class="tex-row">
+          <span class="slider-label">Foreground</span>
+          <button class="tex-btn" id="btn-tex-fg">
+            <span class="tex-swatch" id="tex-swatch-fg" style="background:#888"></span>
+            <span id="tex-fg-name">...</span>
+            <span class="tex-arrow">›</span>
+          </button>
+        </div>
+        <div class="tex-row">
+          <span class="slider-label">Background</span>
+          <button class="tex-btn" id="btn-tex-bg">
+            <span class="tex-swatch" id="tex-swatch-bg" style="background:#555"></span>
+            <span id="tex-bg-name">...</span>
+            <span class="tex-arrow">›</span>
+          </button>
+        </div>
+        <div style="margin-top:8px">
+          <button class="action-btn" id="btn-tex-swap">⇄ Swap FG/BG</button>
+        </div>
+      </div>
+
+      <div class="panel-divider"></div>
+
+      <div class="panel-section">
+        <div class="section-label">BRUSH</div>
+        <div class="slider-row">
+          <span class="slider-label">Width</span>
+          <input type="range" class="wb-slider" min="2" max="100" value="6" id="sl-tex-width">
+          <span class="slider-val" id="val-tex-width">6</span>
+        </div>
+      </div>
+
+      <div class="panel-divider"></div>
+
+      <div class="panel-section">
+        <div class="section-label">PAINT MODE</div>
+        <div class="seg-btn-group" id="tex-mode-group">
+          <button class="seg-btn active" data-val="0">Texture</button>
+          <button class="seg-btn" data-val="1">Pathing</button>
+        </div>
+      </div>
+
+      <div id="tex-pathing-section" class="panel-section" style="display:none;padding-top:6px">
+        <div class="section-label" style="display:flex;align-items:center;gap:6px">
+          PASSABILITY
+          <span class="tooltip-icon" title="Paint the pathfinding layer. Impassable = units cannot walk through these tiles (regardless of texture). Passable = restore walkability. Left-click to paint. Use the Width slider for brush size.">?</span>
+        </div>
+        <div class="seg-btn-group" id="tex-passable-group">
+          <button class="seg-btn active" data-val="1">Passable</button>
+          <button class="seg-btn" data-val="0">Impassable</button>
+        </div>
+      </div>
+
+      <div class="panel-divider"></div>
+
+      <div class="panel-section">
+        <div class="hint-text">Left click = FG texture · Right = BG texture · Ctrl+Z undo</div>
+      </div>
+    </div><!-- #panel-texture -->
+
+    <!-- ── Waypoints panel ─────────────────────────────────── -->
+    <div id="panel-waypoints" class="tool-panel" style="display:none">
+
+      <!-- Mode toggle -->
+      <div class="panel-section" style="padding-bottom:8px">
+        <div class="section-label">MODE</div>
+        <div class="wp-mode-grid">
+          <button class="wp-tool-btn" id="wp-mode-point" data-mode="point">
+            <span class="wp-mode-icon">⊕</span>Point
+          </button>
+          <button class="wp-tool-btn" id="wp-mode-path" data-mode="path">
+            <span class="wp-mode-icon">≋</span>Path
+          </button>
+          <button class="wp-tool-btn active" id="wp-mode-selector" data-mode="selector">
+            <span class="wp-mode-icon">↖</span>Select
+          </button>
+          <button class="wp-tool-btn" id="wp-mode-area" data-mode="area">
+            <span class="wp-mode-icon">⬡</span>Area
+          </button>
+        </div>
+      </div>
+
+      <div class="panel-divider"></div>
+
+      <!-- Selector mode section -->
+      <div id="wp-selector-section" class="panel-section">
+        <div class="hint-text">Click a waypoint to select it · WB popup shows name, X and Y.</div>
+        <div class="hint-text" style="margin-top:4px;opacity:0.6">Right-click to pan.</div>
+      </div>
+
+      <!-- Point mode fields -->
+      <div id="wp-point-section" class="panel-section" style="display:none">
+        <div class="form-row">
+          <span class="form-label">Name</span>
+          <input type="text" class="wb-form-input" id="wp-name" placeholder="Waypoint_1" style="flex:1">
+        </div>
+        <div class="hint-text" style="margin-top:6px">Click on map to place · name auto-increments</div>
+        <div id="wp-place-feedback" class="feedback-text"></div>
+      </div>
+
+      <!-- Path mode fields -->
+      <div id="wp-path-section" class="panel-section" style="display:none">
+        <div class="form-row">
+          <span class="form-label">Path name</span>
+          <input type="text" class="wb-form-input" id="wp-path-name" placeholder="AttackPath_1" style="flex:1">
+        </div>
+        <div id="wp-path-status" class="hint-text" style="margin-top:6px">Click to add nodes · right-click to finish</div>
+        <div id="wp-path-feedback" class="feedback-text"></div>
+      </div>
+
+
+      <!-- Area mode fields -->
+      <div id="wp-area-section" class="panel-section" style="display:none">
+        <div class="form-row">
+          <span class="form-label">Area name</span>
+          <input type="text" class="wb-form-input" id="wp-area-name" placeholder="TriggerArea_1" style="flex:1">
+        </div>
+        <div id="wp-area-status" class="hint-text" style="margin-top:6px;color:#8be9fd">Click on map to place polygon vertices · right-click to close</div>
+        <button class="action-btn" id="wp-area-cancel" style="width:100%;margin-top:8px;display:none">Cancel (0 vertices)</button>
+      </div>
+
+      <div class="panel-divider"></div>
+
+      <!-- Player Starts -->
+      <div class="panel-section">
+        <div class="section-label">PLAYER STARTS</div>
+        <div id="wp-ps-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:6px"></div>
+        <div id="wp-ps-hint" class="hint-text" style="display:none;text-align:center"></div>
+        <button id="wp-ps-cancel" class="action-btn" onclick="cancelPlayerStartPlace()" style="display:none;width:100%;margin-top:4px">Cancel</button>
+      </div>
+
+      <div class="panel-divider"></div>
+
+      <!-- Waypoint list -->
+      <div class="panel-section">
+        <div class="section-label">ON MAP <span class="count-badge" id="wp-count">0</span></div>
+        <input type="text" class="wb-form-input wb-search" id="wp-search" placeholder="Filter..." style="margin-bottom:8px">
+        <div class="shapes-list" id="wp-list"></div>
+      </div>
+
+    </div><!-- #panel-waypoints -->
+
+    <!-- ── Roads & Bridges panel ─────────────────────────────────── -->
+    <div id="panel-roads" class="tool-panel" style="display:none">
+      <div class="panel-title">Roads &amp; Bridges</div>
+
+      <!-- Tabs -->
+      <div style="display:flex;gap:4px;padding:6px 8px 0">
+        <button class="rd-tab active" id="rd-tab-roads" onclick="rdSetTab('roads')">Roads</button>
+        <button class="rd-tab" id="rd-tab-bridges" onclick="rdSetTab('bridges')">Bridges</button>
+      </div>
+
+      <!-- ROADS TAB -->
+      <div id="rd-roads-tab">
+        <div class="panel-section">
+          <div class="section-label">ROAD TYPE</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:8px">
+            <button class="action-btn" onclick="rdOpenPicker('roads')">🛣 Roads</button>
+            <button class="action-btn" onclick="rdOpenPicker('rails')">🛤 Rails</button>
+            <button class="action-btn" onclick="rdOpenPicker('markings')">⛖ Markings</button>
+          </div>
+          <div class="tex-row">
+            <span class="slider-label">Current</span>
+            <button class="tex-btn" onclick="rdOpenPicker(_rdLastRoadCat)">
+              <span class="tex-swatch" id="rd-road-swatch" style="background:#555"></span>
+              <span id="rd-road-label">TwoLane</span>
+              <span class="tex-arrow">›</span>
+            </button>
+          </div>
+          <input type="hidden" id="rd-road-type" value="TwoLane">
+          <div class="form-row" style="margin:8px 0">
+            <span class="form-label">Corner</span>
+            <select id="rd-corner" class="wb-form-input" style="flex:1" onchange="rdApplyToWB(true)">
+              <option value="0">Smooth (curved)</option>
+              <option value="1">Angled</option>
+              <option value="2">Tight</option>
+            </select>
+          </div>
+          <div class="hint-text" style="margin-top:4px;text-align:center;padding:6px 0">Click &amp; drag in the map view to draw roads</div>
+        </div>
+        <div class="panel-divider"></div>
+        <div class="panel-section">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <span class="section-label">ON MAP</span>
+            <button class="mini-btn" onclick="rdRefreshList('road')">Refresh</button>
+          </div>
+          <div id="rd-road-list" style="font-size:11px;max-height:160px;overflow-y:auto"></div>
+        </div>
+      </div>
+
+      <!-- BRIDGES TAB -->
+      <div id="rd-bridges-tab" style="display:none">
+        <div class="panel-section">
+          <div class="section-label">BRIDGE TYPE</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:8px">
+            <button class="action-btn" onclick="rdOpenPicker('sectional')">🌉 Sectional</button>
+            <button class="action-btn" onclick="rdOpenPicker('landmark')">🏛 Landmark</button>
+          </div>
+          <div class="tex-row">
+            <span class="slider-label">Current</span>
+            <button class="tex-btn" onclick="rdOpenPicker('sectional')">
+              <span class="tex-swatch" id="rd-bridge-swatch" style="background:#555"></span>
+              <span id="rd-bridge-label">(pick a bridge)</span>
+              <span class="tex-arrow">›</span>
+            </button>
+          </div>
+          <input type="hidden" id="rd-bridge-type" value="">
+          <div class="hint-text" style="margin-top:6px">Sectional: click &amp; drag between two banks · Landmark: one click places the whole bridge (drag = rotate)</div>
+          <div id="rd-lm-hint" class="hint-text" style="display:none;text-align:center"></div>
+          <button id="rd-lm-cancel" class="action-btn" onclick="msCancelQuickPlace()" style="display:none;width:100%;margin-top:4px">Cancel</button>
+        </div>
+        <div class="panel-divider"></div>
+        <div class="panel-section">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <span class="section-label">ON MAP</span>
+            <button class="mini-btn" onclick="rdRefreshList('bridge')">Refresh</button>
+          </div>
+          <div id="rd-bridge-list" style="font-size:11px;max-height:160px;overflow-y:auto"></div>
+        </div>
+      </div>
+    </div><!-- #panel-roads -->
+
+    <!-- ── Setup panel: Players + Teams ────────────────────────── -->
+    <div id="panel-setup" class="tool-panel" style="display:none">
+
+      <div class="panel-section" style="padding-bottom:0">
+        <div class="draw-mode-group" style="margin-top:0">
+          <label class="draw-mode-btn active" id="su-tab-players"><input type="radio" name="su-tab" value="players" checked> Players</label>
+          <label class="draw-mode-btn"        id="su-tab-teams"  ><input type="radio" name="su-tab" value="teams">   Teams</label>
+        </div>
+      </div>
+
+      <!-- Players tab -->
+      <div id="su-players-section" class="panel-section">
+        <div class="section-label">PLAYERS <span class="count-badge" id="su-player-count">0</span></div>
+        <div class="shapes-list" id="su-player-list" style="margin-bottom:8px"></div>
+
+        <button class="action-btn primary" id="btn-add-skirmish" style="width:100%;margin-bottom:8px">Add Skirmish Players</button>
+        <div id="su-skirmish-feedback" class="feedback-text"></div>
+
+        <div class="panel-divider"></div>
+
+        <!-- Player edit form (shown when a player is selected) -->
+        <div id="su-player-form" style="display:none">
+          <div class="section-label" id="su-player-form-title">Edit Player</div>
+          <div class="form-row">
+            <span class="form-label">Display name</span>
+            <input type="text" class="wb-form-input" id="su-p-displayname" style="flex:1">
+          </div>
+          <div class="form-row" style="margin-top:4px">
+            <span class="form-label">Faction</span>
+            <select class="wb-form-input" id="su-p-faction" style="flex:1">
+              <option value="America">America</option>
+              <option value="China">China</option>
+              <option value="GLA">GLA</option>
+              <option value="Civilian">Civilian</option>
+            </select>
+          </div>
+          <div class="form-row" style="margin-top:4px">
+            <span class="form-label">Start money</span>
+            <input type="number" class="wb-form-input wb-num" id="su-p-money" value="10000" style="flex:1">
+          </div>
+          <div class="action-row" style="margin-top:8px">
+            <button class="action-btn primary" id="btn-su-player-save">Save</button>
+          </div>
+          <div id="su-player-feedback" class="feedback-text"></div>
+        </div>
+      </div>
+
+      <!-- Teams tab -->
+      <div id="su-teams-section" class="panel-section" style="display:none">
+        <div class="section-label">TEAMS <span class="count-badge" id="su-team-count">0</span></div>
+        <input type="text" class="wb-form-input wb-search" id="su-team-search" placeholder="Filter teams..." style="margin-bottom:6px">
+        <div class="shapes-list" id="su-team-list" style="margin-bottom:8px"></div>
+
+        <div class="action-row" style="margin-bottom:8px">
+          <button class="action-btn primary" id="btn-su-team-new">+ New Team</button>
+        </div>
+
+        <div class="panel-divider"></div>
+
+        <!-- Team edit form -->
+        <div id="su-team-form" style="display:none">
+          <div class="section-label" id="su-team-form-title">New Team</div>
+          <div class="form-row">
+            <span class="form-label">Name</span>
+            <input type="text" class="wb-form-input" id="su-t-name" placeholder="teamGLAWave1" style="flex:1">
+          </div>
+          <div class="form-row" style="margin-top:4px">
+            <span class="form-label">Owner</span>
+            <select class="wb-form-input" id="su-t-owner" style="flex:1"></select>
+          </div>
+          <div class="form-row" style="margin-top:4px">
+            <span class="form-label">Home WP</span>
+            <input type="text" class="wb-form-input" id="su-t-home" placeholder="SpawnPoint_1" style="flex:1">
+          </div>
+
+          <!-- Unit slots -->
+          <div class="section-label" style="margin-top:8px;font-size:10px">UNITS</div>
+          <div id="su-t-units"></div>
+          <button class="action-btn" id="btn-su-t-add-unit" style="margin-top:4px;width:100%">+ Add unit type</button>
+
+          <div class="action-row" style="margin-top:8px">
+            <button class="action-btn primary" id="btn-su-team-save">Save</button>
+            <button class="action-btn danger"  id="btn-su-team-del">Delete</button>
+            <button class="action-btn"         id="btn-su-team-cancel">Cancel</button>
+          </div>
+          <div id="su-team-feedback" class="feedback-text"></div>
+        </div>
+      </div>
+
+      <div style="padding:6px 10px">
+        <div id="su-status" class="hint-text"></div>
+      </div>
+
+    </div><!-- #panel-setup -->
+
+    <!-- ── Scripts panel: Wizard + raw Scripts ──────────────────── -->
+    <div id="panel-sidelist" class="tool-panel" style="display:none">
+
+      <!-- Open full editor button -->
+      <div class="panel-section" style="padding-bottom:6px">
+        <button class="action-btn" id="sl-open-editor" style="width:100%;justify-content:center;font-size:12px">
+          Open Script Editor &rarr;
+        </button>
+      </div>
+
+      <!-- Tab bar: Wizard | Scripts -->
+      <div class="panel-section" style="padding-top:0;padding-bottom:0">
+        <div class="draw-mode-group" style="margin-top:0">
+          <label class="draw-mode-btn active" id="sl-tab-wizard" ><input type="radio" name="sl-tab" value="wizard"  checked> Wizard</label>
+          <label class="draw-mode-btn"        id="sl-tab-scripts"><input type="radio" name="sl-tab" value="scripts"> Scripts</label>
+        </div>
+      </div>
+
+      <!-- ── WIZARD sub-panel ──────────────────────────────────── -->
+      <div id="sl-wizard-section" class="panel-section">
+        <div class="section-label">QUICK SCRIPTS</div>
+        <div id="sl-wizard-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:8px">
+          <button class="action-btn" data-wiz="waves"   style="flex-direction:column;height:48px;font-size:11px;grid-column:1/-1;border-color:#2a6040;color:#7de0a8">Wave Sequence (AOD)</button>
+          <button class="action-btn" data-wiz="boss"    style="flex-direction:column;height:48px;font-size:11px;grid-column:1/-1;border-color:#603030;color:#e0a87d">Boss Unit (AOD)</button>
+          <button class="action-btn" data-wiz="spawn"   style="flex-direction:column;height:48px;font-size:11px">Spawn Units</button>
+          <button class="action-btn" data-wiz="win"     style="flex-direction:column;height:48px;font-size:11px">Victory</button>
+          <button class="action-btn" data-wiz="lose"    style="flex-direction:column;height:48px;font-size:11px">Defeat</button>
+          <button class="action-btn" data-wiz="money"   style="flex-direction:column;height:48px;font-size:11px">Give Money</button>
+          <button class="action-btn" data-wiz="message" style="flex-direction:column;height:48px;font-size:11px">Show Message</button>
+          <button class="action-btn" data-wiz="camera"  style="flex-direction:column;height:48px;font-size:11px">Cinematic</button>
+          <button class="action-btn" data-wiz="timer"   style="flex-direction:column;height:48px;font-size:11px">Timer</button>
+        </div>
+
+        <!-- Wizard instances list (rendered by JS) -->
+        <div id="sl-wiz-instances"></div>
+
+        <div id="sl-wiz-form" style="display:none">
+          <div class="panel-divider"></div>
+          <div class="section-label" id="sl-wiz-title">Script Wizard</div>
+          <div id="sl-wiz-fields"></div>
+          <div class="action-row" style="margin-top:8px">
+            <button class="action-btn primary" id="sl-wiz-apply">Create</button>
+            <button class="action-btn"         id="sl-wiz-cancel">Cancel</button>
+          </div>
+          <div id="sl-wiz-feedback" class="feedback-text"></div>
+        </div>
+      </div>
+
+      <!-- Scripts raw list -->
+      <div id="sl-scripts-section" class="panel-section" style="display:none">
+        <div class="section-label">SCRIPTS</div>
+        <div class="form-row" style="margin-bottom:4px">
+          <span class="form-label">Player</span>
+          <select class="wb-form-input" id="sl-script-player" style="flex:1"></select>
+        </div>
+        <input type="text" class="wb-form-input wb-search" id="sl-script-search" placeholder="Filter scripts..." style="margin-bottom:6px">
+        <div class="shapes-list" id="sl-script-list" style="max-height:none"></div>
+        <div style="margin-top:8px">
+          <button class="action-btn" id="sl-scripts-open-editor" style="width:100%;justify-content:center;font-size:12px">
+            Open Script Editor &rarr;
+          </button>
+        </div>
+      </div>
+
+      <div style="padding:6px 10px">
+        <div id="sl-status" class="hint-text"></div>
+      </div>
+
+    </div><!-- #panel-sidelist -->
+
+    <!-- ── Lighting panel ── -->
+    <div id="panel-lighting" class="tool-panel" style="display:none">
+
+      <div class="panel-section">
+        <div class="section-label">TIME OF DAY</div>
+        <div class="map-op-row" style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <button class="map-op-btn lt-tod-btn" data-tod="1">🌅 Morning</button>
+          <button class="map-op-btn lt-tod-btn" data-tod="2">☀️ Afternoon</button>
+          <button class="map-op-btn lt-tod-btn" data-tod="3">🌇 Evening</button>
+          <button class="map-op-btn lt-tod-btn" data-tod="4">🌙 Night</button>
+        </div>
+        <div class="hint-text" style="margin-top:6px">Each time of day stores its own light setup. The map plays with the time of day chosen in Map Settings.</div>
+      </div>
+
+      <div class="panel-divider"></div>
+
+      <div class="panel-section">
+        <div class="section-label">LIGHT</div>
+        <div class="map-op-row" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+          <button class="map-op-btn lt-light-btn active" data-light="0">Sun</button>
+          <button class="map-op-btn lt-light-btn" data-light="1">Accent 1</button>
+          <button class="map-op-btn lt-light-btn" data-light="2">Accent 2</button>
+        </div>
+        <div class="form-row" style="margin-top:8px;display:flex;align-items:center;gap:8px">
+          <label style="flex:1">Apply to</label>
+          <select id="lt-target" class="ms-input" style="flex:2">
+            <option value="both">Terrain + Objects</option>
+            <option value="terrain">Terrain only</option>
+            <option value="objects">Objects only</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="panel-divider"></div>
+
+      <div class="panel-section">
+        <div class="section-label">COLORS</div>
+        <div class="form-row" style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+          <label style="flex:1">Sunlight (diffuse)</label>
+          <input type="color" id="lt-diffuse" value="#ffffff" style="width:48px;height:26px;border:none;background:none;cursor:pointer">
+        </div>
+        <div class="form-row" style="display:flex;align-items:center;gap:10px">
+          <label id="lt-ambient-label" style="flex:1">Ambient (overall glow)</label>
+          <input type="color" id="lt-ambient" value="#404040" style="width:48px;height:26px;border:none;background:none;cursor:pointer">
+        </div>
+        <div class="hint-text" id="lt-ambient-hint" style="margin-top:4px;display:none">Ambient only takes effect on the Sun light.</div>
+      </div>
+
+      <div class="panel-divider"></div>
+
+      <div class="panel-section">
+        <div class="section-label">DIRECTION</div>
+        <div class="slider-row">
+          <label>Azimuth (compass)</label>
+          <input type="range" class="wb-slider" id="lt-azimuth" min="0" max="360" value="45" step="1">
+          <span id="lt-azimuth-val">45°</span>
+        </div>
+        <div class="slider-row">
+          <label>Elevation (height)</label>
+          <input type="range" class="wb-slider" id="lt-elevation" min="0" max="90" value="45" step="1">
+          <span id="lt-elevation-val">45°</span>
+        </div>
+        <div class="hint-text" style="margin-top:4px">Elevation 90° = sun straight overhead. Lower values give longer shadows.</div>
+      </div>
+
+      <div class="panel-divider"></div>
+
+      <div class="panel-divider"></div>
+
+      <div class="panel-section">
+        <button class="map-op-btn" id="lt-reset" style="width:100%" title="Restore EA's factory-default lighting for all times of day">↺ Reset to defaults</button>
+        <div class="hint-text" style="margin-top:4px">Restores the built-in lighting for every time of day. Or reload the map to undo unsaved changes.</div>
+      </div>
+
+      <div class="panel-section" style="padding:6px 10px">
+        <div id="lt-status" class="hint-text"></div>
+      </div>
+
+    </div><!-- #panel-lighting -->
+
+    <!-- ── AI Agent panel ─────────────────────────────────── -->
+    <div id="panel-ai" class="tool-panel" style="display:none">
+
+      <div class="panel-section">
+        <div class="section-label">AGENT API</div>
+        <div class="hint-text" style="margin-bottom:8px">
+          While this editor runs, everything you can click here is also available as a
+          REST API. Point any AI agent or script at:
+        </div>
+        <div style="font-family:monospace;font-size:12px;background:rgba(0,0,0,0.3);padding:6px 8px;border-radius:4px;user-select:all">http://127.0.0.1:8099</div>
+        <button class="action-btn" id="ai-btn-test" style="width:100%;margin-top:8px">Test Connection</button>
+        <div id="ai-test-result" class="hint-text" style="margin-top:6px;text-align:center"></div>
+      </div>
+
+      <div class="panel-divider"></div>
+
+      <div class="panel-section">
+        <div class="section-label">STARTER PROMPT</div>
+        <div class="hint-text" style="margin-bottom:8px">
+          Using Claude Code or another coding agent? Copy this into your prompt or
+          CLAUDE.md and ask for the map you want.
+        </div>
+        <button class="action-btn primary" id="ai-btn-copy" style="width:100%">Copy Agent Prompt</button>
+        <div id="ai-copy-result" class="hint-text" style="margin-top:6px;text-align:center"></div>
+      </div>
+
+      <div class="panel-divider"></div>
+
+      <div class="panel-section">
+        <div class="section-label">GOLDEN RULES</div>
+        <div class="hint-text">
+          1. <b>Coordinates:</b> 1 cell = 10 world units. Most endpoints take world
+          units; ShapeFill takes cell coordinates.<br><br>
+          2. <b>Verify everything:</b> after each change, read state back with a GET
+          endpoint — <code>ok:true</code> means accepted, not succeeded.<br><br>
+          3. <b>Timeouts?</b> A native WorldBuilder dialog is probably waiting for a
+          click — bring the WB window to front.
+        </div>
+      </div>
+
+      <div class="panel-divider"></div>
+
+      <div class="panel-section">
+        <button class="action-btn" id="ai-btn-guide" style="width:100%">Open Full Guide (GitHub) →</button>
+        <div class="hint-text" style="margin-top:6px;text-align:center">Endpoint reference, worked example, pitfalls</div>
+      </div>
+
+    </div><!-- #panel-ai -->
+
+  </div><!-- #side-panel -->
+
+  <!-- ── Inline Team Creation modal (from Script Wizard "+" button) ── -->
+  <div id="wiz-team-backdrop" style="display:none;position:fixed;inset:0;z-index:2500;background:rgba(4,10,20,0.88);align-items:center;justify-content:center;">
+    <div style="background:#0a1628;border:1px solid #1a3055;border-radius:8px;padding:22px 26px;width:400px;max-width:96vw;max-height:90vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,0.8)">
+      <div style="font-size:15px;font-weight:700;color:#c8daf0;margin-bottom:18px">New Team</div>
+      <div class="form-row" style="margin-bottom:8px">
+        <span class="form-label" style="min-width:60px">Name</span>
+        <input class="wb-form-input" id="wt-name" placeholder="team_rocketeers" style="flex:1">
+      </div>
+      <div class="form-row" style="margin-bottom:8px">
+        <span class="form-label" style="min-width:60px">Owner</span>
+        <select class="wb-form-input" id="wt-owner" style="flex:1"></select>
+      </div>
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.8px;color:#5a7a9a;margin:12px 0 6px">Units</div>
+      <div id="wt-units"></div>
+      <button class="action-btn" id="wt-add-unit" style="width:100%;margin-top:6px;font-size:11px">+ Add unit type</button>
+      <div class="action-row" style="margin-top:16px">
+        <button class="action-btn primary" id="wt-create">Create Team</button>
+        <button class="action-btn" id="wt-cancel">Cancel</button>
+      </div>
+      <div id="wt-feedback" class="feedback-text"></div>
+    </div>
+  </div>
+
+
+  <!-- Bottom toolbar -->
+  <div id="toolbar">
+    <div class="tool-group" id="tool-group">
+      <button class="tool-btn" data-tool="mapsetup" title="Map Setup">
+        <span class="tool-icon">🗺</span>
+        <span class="tool-label">Map Setup</span>
+      </button>
+      <div class="tool-sep"></div>
+      <button class="tool-btn" data-tool="terrain" title="Terrain Height">
+        <span class="tool-icon">⛰</span>
+        <span class="tool-label">Terrain</span>
+      </button>
+      <button class="tool-btn" data-tool="texture" title="Texture Painting">
+        <span class="tool-icon">🎨</span>
+        <span class="tool-label">Texture</span>
+      </button>
+      <button class="tool-btn" data-tool="shapefill" title="Shape Fill Painter">
+        <span class="tool-icon">⬛</span>
+        <span class="tool-label">ShapeFill</span>
+      </button>
+      <div class="tool-sep"></div>
+      <button class="tool-btn" data-tool="objects" title="Place Objects">
+        <span class="tool-icon">🏗</span>
+        <span class="tool-label">Objects</span>
+      </button>
+      <button class="tool-btn" data-tool="nature" title="Plant Trees &amp; Vegetation">
+        <span class="tool-icon">🌿</span>
+        <span class="tool-label">Nature</span>
+      </button>
+      <button class="tool-btn" data-tool="waypoints" title="Waypoints">
+        <span class="tool-icon">📍</span>
+        <span class="tool-label">Waypoints</span>
+      </button>
+      <button class="tool-btn" data-tool="roads" title="Roads &amp; Bridges">
+        <span class="tool-icon">🛣</span>
+        <span class="tool-label">Roads</span>
+      </button>
+      <button class="tool-btn" data-tool="setup" title="Players · Teams setup">
+        <span class="tool-icon">👥</span>
+        <span class="tool-label">Setup</span>
+      </button>
+      <button class="tool-btn" data-tool="sidelist" title="Script Wizard">
+        <span class="tool-icon">📜</span>
+        <span class="tool-label">Scripts</span>
+      </button>
+      <div class="tool-sep"></div>
+      <button class="tool-btn" data-tool="lighting" title="Lighting">
+        <span class="tool-icon">💡</span>
+        <span class="tool-label">Lighting</span>
+      </button>
+      <button class="tool-btn" data-tool="ai" title="Drive this editor with an AI agent">
+        <span class="tool-icon">🤖</span>
+        <span class="tool-label">AI</span>
+      </button>
+    </div>
+
+    <div class="toolbar-right">
+      <button class="view-btn active" id="view-2d" title="2D Top-down view">2D</button>
+      <button class="view-btn" id="view-3d" title="3D view">3D</button>
+      <div class="tool-sep"></div>
+      <button class="view-toggle-btn" id="btn-view-popover" title="View options">View ▾</button>
+    </div>
+  </div>
+
+  <!-- Texture picker modal -->
+  <div id="tex-picker" class="hidden">
+    <div id="tex-picker-modal">
+      <div id="tex-picker-header">
+        <span id="tex-picker-title">Fill Texture</span>
+        <input type="text" id="tex-picker-search" placeholder="Search texture...">
+        <button id="tex-picker-close">✕</button>
+      </div>
+      <div id="tex-picker-grid"></div>
+    </div>
+  </div>
+
+  <!-- ── Scripts Modal ─────────────────────────────────────────────── -->
+  <div id="modal-scripts" class="hidden">
+    <div id="modal-scripts-box">
+
+      <!-- Header: OG WB style -->
+      <div id="modal-scripts-header">
+        <span id="modal-scripts-title">Scripts</span>
+        <select id="msc-player-sel" class="msc-player-sel" style="display:none"></select>
+        <button class="ms-btn" id="btn-msc-refresh" style="font-size:10px;padding:3px 8px" title="Reload from WorldBuilder">↻ Refresh</button>
+        <button id="btn-modal-scripts-close">✕</button>
+      </div>
+
+      <!-- Body: tree left, buttons right — always visible -->
+      <div id="modal-scripts-body">
+
+        <!-- Left: tree only -->
+        <div id="msc-tree-col">
+          <div id="msc-tree"></div>
+        </div>
+
+        <!-- Right: OG WB-style button column + inline name input -->
+        <div id="msc-btn-col">
+          <!-- Inline name input — shown here where it's always visible -->
+          <div id="msc-inline-input" style="display:none;margin-bottom:6px;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.07)">
+            <div id="msc-inline-label" style="font-size:10px;color:var(--text-hint);margin-bottom:4px">Name:</div>
+            <input type="text" class="msc-input" id="msc-inline-name" style="width:100%;margin-bottom:4px" placeholder="Name...">
+            <div style="display:flex;gap:4px">
+              <button class="ms-btn primary" id="btn-msc-inline-ok"     style="flex:1;font-size:10px">OK</button>
+              <button class="ms-btn"         id="btn-msc-inline-cancel" style="flex:1;font-size:10px">Cancel</button>
+            </div>
+          </div>
+
+          <button class="ms-btn" id="btn-msc-new-folder">New Folder...</button>
+          <button class="ms-btn" id="btn-msc-new-script">New Script...</button>
+          <button class="ms-btn" id="btn-msc-edit-script">Edit...</button>
+          <div class="msc-btn-sep"></div>
+          <button class="ms-btn" id="btn-msc-copy-script">Copy Script</button>
+          <button class="ms-btn danger" id="btn-msc-delete">Delete</button>
+          <div style="flex:1"></div>
+          <div id="msc-tree-status" style="font-size:10px;color:var(--text-hint);word-break:break-word"></div>
+          <div id="msc-sel-desc" style="margin-top:6px"></div>
+        </div>
+
+      </div><!-- /modal-scripts-body -->
+    </div><!-- /modal-scripts-box -->
+  </div><!-- /modal-scripts -->
+
+  <!-- ── Script editor sub-modal (opens when Edit / New Script clicked) ── -->
+  <div id="msc-script-modal" class="hidden">
+    <div id="msc-script-modal-box">
+      <div class="msc-sub-header">
+        <span id="msc-s-editor-title">Script</span>
+        <button id="btn-msc-script-modal-close">✕</button>
+      </div>
+
+      <!-- Inner tabs -->
+      <div class="ms-inner-tabs" style="padding:8px 12px 0;flex-shrink:0">
+        <button class="ms-inner-tab active" data-stab="props">Script Properties</button>
+        <button class="ms-inner-tab" data-stab="conds">Script Conditions</button>
+        <button class="ms-inner-tab" data-stab="true">Actions if true</button>
+        <button class="ms-inner-tab" data-stab="false">Actions if false</button>
+      </div>
+
+      <!-- PROPERTIES -->
+      <div class="ms-inner-body" id="stab-props" style="flex:1;overflow-y:auto;padding:10px 16px">
+        <div class="msc-field-row" style="margin-bottom:8px">
+          <label class="msc-label">Script Name</label>
+          <input type="text" class="msc-input" id="msc-s-name" style="flex:1">
+        </div>
+        <div class="msc-props-grid">
+          <div>
+            <div class="ms-group-label">Script Flags</div>
+            <label class="ms-checkbox-label"><input type="checkbox" id="msc-s-sub"> Script is Subroutine</label>
+            <label class="ms-checkbox-label"><input type="checkbox" id="msc-s-active" checked> Script is Active</label>
+            <label class="ms-checkbox-label"><input type="checkbox" id="msc-s-oneshot" checked> Deactivate upon success</label>
+          </div>
+          <div>
+            <div class="ms-group-label">Active in</div>
+            <label class="ms-checkbox-label"><input type="checkbox" id="msc-s-easy"   checked> Easy</label>
+            <label class="ms-checkbox-label"><input type="checkbox" id="msc-s-normal" checked> Normal</label>
+            <label class="ms-checkbox-label"><input type="checkbox" id="msc-s-hard"   checked> Hard</label>
+          </div>
+          <div>
+            <div class="ms-group-label">Evaluate script</div>
+            <label class="ms-checkbox-label"><input type="radio" name="msc-eval" id="msc-s-eval-frame" value="frame" checked> Every Frame</label>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+              <label class="ms-checkbox-label" style="flex-shrink:0"><input type="radio" name="msc-eval" id="msc-s-eval-secs" value="secs"> Every</label>
+              <input type="number" class="msc-input" id="msc-s-eval-n" value="1" min="1" style="width:50px">
+              <span style="font-size:11px;color:var(--text-hint)">seconds</span>
+            </div>
+          </div>
+        </div>
+        <div class="ms-group-label" style="margin-top:8px">Script Comment</div>
+        <textarea class="msc-input" id="msc-s-comment" rows="4" style="width:100%;resize:vertical;margin-top:4px" placeholder="Optional notes..."></textarea>
+      </div>
+
+      <!-- CONDITIONS -->
+      <div class="ms-inner-body hidden" id="stab-conds" style="flex:1;overflow-y:auto;padding:10px 16px">
+        <div class="msc-list-label">Conditions for this script:</div>
+        <div class="msc-split-v">
+          <div class="msc-cond-list-wrap">
+            <div id="msc-cond-list" class="msc-item-list"></div>
+            <div id="msc-cond-side">
+              <button class="ms-btn" id="btn-msc-cond-new">New</button>
+              <button class="ms-btn" id="btn-msc-cond-edit">Edit</button>
+              <button class="ms-btn" id="btn-msc-cond-copy">Copy</button>
+              <button class="ms-btn danger" id="btn-msc-cond-del">Delete</button>
+              <button class="ms-btn" id="btn-msc-cond-or">Or</button>
+            </div>
+          </div>
+          <div class="msc-cond-desc" id="msc-cond-desc"></div>
+          <div class="msc-move-row">
+            <button class="ms-btn" id="btn-msc-cond-up">Move Up</button>
+            <button class="ms-btn" id="btn-msc-cond-down">Move Down</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ACTIONS IF TRUE -->
+      <div class="ms-inner-body hidden" id="stab-true" style="flex:1;overflow-y:auto;padding:10px 16px">
+        <div class="msc-list-label">Actions to take if conditions are true:</div>
+        <div class="msc-split-v">
+          <div class="msc-cond-list-wrap">
+            <div id="msc-act-true-list" class="msc-item-list"></div>
+            <div id="msc-act-true-side">
+              <button class="ms-btn" id="btn-msc-atrue-new">New</button>
+              <button class="ms-btn" id="btn-msc-atrue-edit">Edit</button>
+              <button class="ms-btn" id="btn-msc-atrue-copy">Copy</button>
+              <button class="ms-btn danger" id="btn-msc-atrue-del">Delete</button>
+            </div>
+          </div>
+          <div class="msc-cond-desc" id="msc-act-true-desc"></div>
+          <div class="msc-move-row">
+            <button class="ms-btn" id="btn-msc-atrue-up">Move Up</button>
+            <button class="ms-btn" id="btn-msc-atrue-down">Move Down</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ACTIONS IF FALSE -->
+      <div class="ms-inner-body hidden" id="stab-false" style="flex:1;overflow-y:auto;padding:10px 16px">
+        <div class="msc-list-label">Actions to take if conditions are false:</div>
+        <div class="msc-split-v">
+          <div class="msc-cond-list-wrap">
+            <div id="msc-act-false-list" class="msc-item-list"></div>
+            <div id="msc-act-false-side">
+              <button class="ms-btn" id="btn-msc-afalse-new">New</button>
+              <button class="ms-btn" id="btn-msc-afalse-edit">Edit</button>
+              <button class="ms-btn" id="btn-msc-afalse-copy">Copy</button>
+              <button class="ms-btn danger" id="btn-msc-afalse-del">Delete</button>
+            </div>
+          </div>
+          <div class="msc-cond-desc" id="msc-act-false-desc"></div>
+          <div class="msc-move-row">
+            <button class="ms-btn" id="btn-msc-afalse-up">Move Up</button>
+            <button class="ms-btn" id="btn-msc-afalse-down">Move Down</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="msc-sub-footer">
+        <button class="ms-btn primary" id="btn-msc-save-script">Save</button>
+        <button class="ms-btn danger"  id="btn-msc-del-script">Delete</button>
+        <button class="ms-btn"         id="btn-msc-cancel-script">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Script Picker (full-screen condition/action picker) ─────────── -->
+  <div id="msc-cond-modal" class="hidden">
+    <div id="scp-box">
+      <!-- Header -->
+      <div id="scp-header">
+        <span id="msc-cond-modal-title" style="font-size:13px;font-weight:600;color:var(--text)">Script Picker</span>
+        <button class="scp-tab active" id="scp-tab-cond" data-tab="cond">Conditions</button>
+        <button class="scp-tab" id="scp-tab-act"  data-tab="act">Actions</button>
+        <div class="scp-search-wrap">
+          <span style="color:#444;font-size:13px">🔍</span>
+          <input type="text" id="scp-search" placeholder="Search…">
+        </div>
+        <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:#666;white-space:nowrap;cursor:pointer">
+          <input type="checkbox" id="scp-show-unused"> Show UNUSED
+        </label>
+        <button id="btn-msc-cond-modal-close" style="margin-left:auto;width:28px;height:28px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:#888;cursor:pointer">✕</button>
+      </div>
+      <!-- Chip row -->
+      <div id="scp-chips"></div>
+      <!-- Main: picker left + params right -->
+      <div id="scp-body">
+        <div id="scp-grid-area"></div>
+        <div id="scp-params-panel">
+          <div id="msc-cond-params"></div>
+          <div id="msc-cond-preview" style="margin-top:8px"></div>
+        </div>
+      </div>
+      <!-- Footer -->
+      <div id="scp-footer">
+        <div id="scp-sel-info" style="font-size:11px;color:#555">No selection</div>
+        <div style="display:flex;gap:8px">
+          <button class="ms-btn" id="btn-msc-cond-cancel">Cancel</button>
+          <button class="ms-btn primary" id="btn-msc-cond-ok" disabled>OK</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Object picker modal (full visual grid) -->
+  <div id="obj-picker" class="hidden">
+    <div id="obj-picker-modal">
+      <div id="obj-picker-header">
+        <span id="obj-picker-title">Place Object</span>
+        <input type="text" id="obj-picker-search" placeholder="Search...">
+        <button id="obj-picker-close">✕</button>
+      </div>
+      <div id="obj-picker-factions"></div>
+      <div id="obj-picker-grid"></div>
+    </div>
+  </div>
+
+  <!-- Road / rail / marking / bridge type picker (Roads tab) -->
+  <div id="rd-picker" class="hidden ui-capture">
+    <div id="rd-picker-modal">
+      <div id="rd-picker-header">
+        <span id="rd-picker-title">Pick Road</span>
+        <input type="text" id="rd-picker-search" placeholder="Search...">
+        <button id="rd-picker-close" onclick="rdClosePicker()">✕</button>
+      </div>
+      <div id="rd-picker-grid"></div>
+    </div>
+  </div>
+
+  <!-- View toggles popover -->
+  <div id="view-popover"></div>
+
+  <!-- Object Properties floating panel -->
+  <div id="obj-props-panel" class="hidden">
+    <div id="obj-props-header">
+      <span id="obj-props-title">Object Properties</span>
+      <button id="obj-props-close">✕</button>
+    </div>
+    <div id="obj-props-body">
+      <!-- Populated by JS based on selection type -->
+    </div>
+  </div>
+
+  <button id="btn-launch-wb" style="display:none">▶ Open WorldBuilder</button>
+
+  <!-- Status bar -->
+  <div id="status-bar">
+    <span id="status-tool">ShapeFill · Rect mode · drawing</span>
+    <span class="status-sep">|</span>
+    <span id="status-coords">X: 284  Y: 190</span>
+    <span class="status-sep">|</span>
+    <span id="status-mapsize">— × — tiles</span>
+    <span class="status-sep">|</span>
+    <span id="status-shapes">Shapes: —</span>
+  </div>
+
+  <!-- Start screen (fullscreen, shown on app start) -->
+  <div id="start-screen" class="hidden">
+
+    <!-- State 1: choice -->
+    <div class="start-inner" id="start-choice">
+      <div class="start-title">WorldBuilder</div>
+      <div class="start-sub">What would you like to do?</div>
+      <div class="start-cards">
+        <div class="start-card" id="start-new">
+          <div class="start-card-icon">🗺</div>
+          <div class="start-card-name">New Map</div>
+          <div class="start-card-desc">Pick a size, game mode and subtype, then start building</div>
+        </div>
+        <div class="start-card" id="start-load">
+          <div class="start-card-icon">📂</div>
+          <div class="start-card-name">Load Map</div>
+          <div class="start-card-desc">Open an existing map from your map folders</div>
+        </div>
+      </div>
+      <button class="start-skip" id="start-skip">Continue with current map ›</button>
+    </div>
+
+    <!-- State 2: new map setup -->
+    <div class="start-inner" id="start-newmap" style="display:none">
+      <div class="start-title">New Map</div>
+
+      <div class="start-section">
+        <div class="start-label">Map size</div>
+        <div class="start-seg">
+          <button class="seg-btn" data-startsize="150">Small<span class="start-seg-sub">150 × 150</span></button>
+          <button class="seg-btn active" data-startsize="200">Medium<span class="start-seg-sub">200 × 200</span></button>
+          <button class="seg-btn" data-startsize="300">Large<span class="start-seg-sub">300 × 300</span></button>
+          <button class="seg-btn" data-startsize="400">Huge<span class="start-seg-sub">400 × 400</span></button>
+        </div>
+        <div class="start-size-row">
+          <label>W <input type="number" id="start-nm-x" value="200" min="10" max="1000" step="10"></label>
+          <label>H <input type="number" id="start-nm-y" value="200" min="10" max="1000" step="10"></label>
+          <label>Border <input type="number" id="start-nm-border" value="10" min="5" max="100" step="5"></label>
+          <label>Ground level <input type="number" id="start-nm-height" value="20" min="0" max="255" step="1"></label>
+          <span class="start-playable">Playable: <b id="start-nm-playable">180 × 180</b></span>
+        </div>
+      </div>
+
+      <div class="start-section">
+        <div class="start-label">Game mode</div>
+        <div class="start-seg">
+          <button class="seg-btn active" data-startmode="skirmish">Skirmish / Multiplayer</button>
+          <button class="seg-btn" data-startmode="coop">Co-op</button>
+          <button class="seg-btn" data-startmode="mission">Mission</button>
+        </div>
+      </div>
+
+      <div class="start-section" id="start-sub-skirmish">
+        <div class="start-label">Players</div>
+        <div class="start-seg">
+          <button class="seg-btn" data-startpvp="1v1">1v1</button>
+          <button class="seg-btn active" data-startpvp="2v2">2v2</button>
+          <button class="seg-btn" data-startpvp="3v3">3v3</button>
+          <button class="seg-btn" data-startpvp="4v4">4v4</button>
+          <button class="seg-btn" data-startpvp="ffa">FFA</button>
+        </div>
+      </div>
+
+      <div class="start-section" id="start-sub-coop" style="display:none">
+        <div class="start-label">Co-op type</div>
+        <div class="start-seg">
+          <button class="seg-btn active" data-startcoop="aod">AOD</button>
+          <button class="seg-btn" data-startcoop="zombie">Zombie</button>
+          <button class="seg-btn" data-startcoop="survival">Survival</button>
+          <button class="seg-btn" data-startcoop="custom">Custom</button>
+        </div>
+      </div>
+
+      <div class="start-section" id="start-sub-mission" style="display:none">
+        <div class="start-hint">Single-player mission — set up players and scripts after creating the map.</div>
+      </div>
+
+      <div class="start-footer">
+        <button class="ms-btn" id="start-nm-back">‹ Back</button>
+        <span class="start-status" id="start-nm-status"></span>
+        <button class="ms-btn primary" id="start-nm-create">Create Map</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Load Map modal -->
+  <div id="modal-load" class="hidden">
+    <div id="modal-load-box">
+      <div class="filedlg-header">
+        <span class="filedlg-title">Open Map</span>
+        <button class="filedlg-close" id="btn-modal-load-close">✕</button>
+      </div>
+      <div class="filedlg-presets" id="modal-load-presets">
+        <button class="filedlg-preset active" data-preset="all">All</button>
+        <!-- Folder chips injected here by renderFolderChips() in mapfile.js -->
+        <button class="filedlg-addfolder" id="btn-add-scandir" title="Add a folder to scan for maps">+ New folder</button>
+      </div>
+      <div class="filedlg-search-row">
+        <input type="text" id="modal-load-search" class="filedlg-search" placeholder="Filter maps…">
+        <select id="modal-load-playerfilter" class="filedlg-search" style="flex:none;width:auto">
+          <option value="">Any players</option>
+          <option value="1">1 player</option>
+          <option value="2">2 players</option>
+          <option value="3">3 players</option>
+          <option value="4">4 players</option>
+          <option value="5">5 players</option>
+          <option value="6">6 players</option>
+          <option value="7">7 players</option>
+          <option value="8">8 players</option>
+        </select>
+      </div>
+      <div id="modal-load-list" class="filedlg-list">
+        <div style="padding:20px;text-align:center;color:var(--text-dim);font-size:12px">Scanning…</div>
+      </div>
+      <div class="filedlg-footer">
+        <span class="filedlg-status" id="modal-load-status"></span>
+        <div class="filedlg-actions">
+          <button class="ms-btn" id="btn-modal-load-cancel">Cancel</button>
+          <button class="ms-btn primary" id="btn-modal-load-open" disabled>Open</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Save As modal -->
+  <div id="modal-saveas" class="hidden">
+    <div id="modal-saveas-box">
+      <div class="filedlg-header">
+        <span class="filedlg-title">Save Map As</span>
+        <button class="filedlg-close" id="btn-modal-saveas-close">✕</button>
+      </div>
+      <div class="saveas-body">
+        <div>
+          <div class="saveas-label">Current file</div>
+          <div class="saveas-path-box" id="saveas-current-path">—</div>
+        </div>
+        <div id="saveas-file-list" class="filedlg-list" style="max-height:200px"></div>
+        <div>
+          <div class="saveas-label">Save to folder</div>
+          <select id="saveas-dir-select" class="filedlg-search" style="margin-top:4px;width:100%">
+            <option value="">Loading…</option>
+          </select>
+        </div>
+        <div>
+          <div class="saveas-label">Map name</div>
+          <input type="text" id="saveas-name-input" class="filedlg-search" placeholder="map_name" style="margin-top:4px">
+        </div>
+      </div>
+      <div class="filedlg-footer">
+        <span class="filedlg-status" id="saveas-status"></span>
+        <div class="filedlg-actions">
+          <button class="ms-btn" id="btn-modal-saveas-cancel">Cancel</button>
+          <button class="ms-btn primary" id="btn-modal-saveas-go">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- New Map modal -->
+  <div id="modal-newmap" class="hidden">
+    <div id="modal-newmap-box" class="mapdlg-box">
+      <div class="filedlg-header">
+        <span class="filedlg-title">New Map</span>
+        <button class="filedlg-close" id="btn-modal-newmap-close">✕</button>
+      </div>
+      <div class="mapdlg-body">
+        <div class="mapdlg-field">
+          <label class="mapdlg-label">Width (tiles)</label>
+          <input type="number" id="newmap-x" class="mapdlg-input" value="200" min="10" max="1000" step="10">
+        </div>
+        <div class="mapdlg-field">
+          <label class="mapdlg-label">Height (tiles)</label>
+          <input type="number" id="newmap-y" class="mapdlg-input" value="200" min="10" max="1000" step="10">
+        </div>
+        <div class="mapdlg-field">
+          <label class="mapdlg-label">Border width</label>
+          <input type="number" id="newmap-border" class="mapdlg-input" value="10" min="5" max="100" step="5">
+        </div>
+        <div class="mapdlg-field">
+          <label class="mapdlg-label">Initial height</label>
+          <input type="number" id="newmap-height" class="mapdlg-input" value="20" min="0" max="255" step="1">
+        </div>
+        <div class="mapdlg-hint">Playable area: <span id="newmap-playable">180 × 180</span></div>
+      </div>
+      <div class="filedlg-footer">
+        <span class="filedlg-status" id="newmap-status"></span>
+        <div class="filedlg-actions">
+          <button class="ms-btn" id="btn-modal-newmap-cancel">Cancel</button>
+          <button class="ms-btn primary" id="btn-modal-newmap-create">Create Map</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Resize Map modal -->
+  <div id="modal-resize" class="hidden">
+    <div id="modal-resize-box" class="mapdlg-box">
+      <div class="filedlg-header">
+        <span class="filedlg-title">Resize Map</span>
+        <button class="filedlg-close" id="btn-modal-resize-close">✕</button>
+      </div>
+      <div class="mapdlg-body">
+        <div class="mapdlg-field">
+          <label class="mapdlg-label">Width (tiles)</label>
+          <input type="number" id="resize-x" class="mapdlg-input" value="200" min="10" max="1000" step="10">
+        </div>
+        <div class="mapdlg-field">
+          <label class="mapdlg-label">Height (tiles)</label>
+          <input type="number" id="resize-y" class="mapdlg-input" value="200" min="10" max="1000" step="10">
+        </div>
+        <div class="mapdlg-field">
+          <label class="mapdlg-label">Border width</label>
+          <input type="number" id="resize-border" class="mapdlg-input" value="10" min="5" max="100" step="5">
+        </div>
+        <div class="mapdlg-field">
+          <label class="mapdlg-label">Initial height (new areas)</label>
+          <input type="number" id="resize-height" class="mapdlg-input" value="20" min="0" max="255" step="1">
+        </div>
+        <div class="mapdlg-hint">Playable area: <span id="resize-playable">180 × 180</span></div>
+        <div class="mapdlg-anchor-label">Anchor point (where to keep existing terrain)</div>
+        <div class="anchor-grid" id="anchor-grid">
+          <button class="anchor-btn" data-anchor="tl"></button>
+          <button class="anchor-btn" data-anchor="tc"></button>
+          <button class="anchor-btn" data-anchor="tr"></button>
+          <button class="anchor-btn" data-anchor="ml"></button>
+          <button class="anchor-btn active" data-anchor="mc"></button>
+          <button class="anchor-btn" data-anchor="mr"></button>
+          <button class="anchor-btn" data-anchor="bl"></button>
+          <button class="anchor-btn" data-anchor="bc"></button>
+          <button class="anchor-btn" data-anchor="br"></button>
+        </div>
+      </div>
+      <div class="filedlg-footer">
+        <span class="filedlg-status" id="resize-status"></span>
+        <div class="filedlg-actions">
+          <button class="ms-btn" id="btn-modal-resize-cancel">Cancel</button>
+          <button class="ms-btn primary" id="btn-modal-resize-apply">Resize Map</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Grove brush overlay canvas — full-window, pointer-events:none -->
+  <canvas id="grove-canvas" style="position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:900;display:none"></canvas>
+
+  <script src="_script_data.js"></script>
+  <script src="_script_params.js"></script>
+  <!-- renderer modules — load order matters; boot.js must be last -->
+  <script src="js/core.js"></script>
+  <script src="js/shapefill.js"></script>
+  <script src="js/mapfile.js"></script>
+  <script src="js/objects.js"></script>
+  <script src="js/waypoints.js"></script>
+  <script src="js/roads.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/terrain.js"></script>
+  <script src="js/objprops.js"></script>
+  <script src="js/view.js"></script>
+  <script src="js/lighting.js"></script>
+  <script src="js/ai.js"></script>
+  <script src="js/sideslist.js"></script>
+  <script src="js/wizards.js"></script>
+  <script src="js/setup.js"></script>
+  <script src="js/mapsetup.js"></script>
+  <script src="js/scripts-modal.js"></script>
+  <script src="js/startscreen.js"></script>
+  <script src="js/boot.js"></script>
+</body>
+</html>

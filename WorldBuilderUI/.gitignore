@@ -1,0 +1,5 @@
+app/node_modules/
+app/dist/
+app/*.log
+app/data/map-scan-dirs.json
+app/data/playercounts.json

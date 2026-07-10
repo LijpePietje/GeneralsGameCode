@@ -1,0 +1,41 @@
+{
+  "name": "worldbuilder-ui-poc",
+  "version": "1.0.0",
+  "description": "WorldBuilder Modern UI - POC",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "28.3.3",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.worldbuilder-community.ui",
+    "productName": "WorldBuilderUI",
+    "asar": true,
+    "files": [
+      "**/*",
+      "!*.log",
+      "!INSTALL.md"
+    ],
+    "win": {
+      "target": [
+        { "target": "portable", "arch": ["x64"] }
+      ]
+    },
+    "electronLanguages": ["en-US"],
+    "extraResources": [
+      { "from": "../REAL_OBJECT_NAMES.txt", "to": "REAL_OBJECT_NAMES.txt" },
+      { "from": "../building_icons", "to": "building_icons" },
+      { "from": "../terrain_textures", "to": "terrain_textures" }
+    ],
+    "portable": {
+      "artifactName": "WorldBuilderUI.exe"
+    },
+    "directories": {
+      "output": "dist"
+    }
+  }
+}
