@@ -169,6 +169,19 @@ void MeshMoldTool::updateMeshLocation(Bool changePreview)
 	}
 }
 
+// TheSuperHackers @feature Nemellud 04/07/2026 EmbeddedMode: first pipe placement snaps mold height to terrain, matching native mouseDown
+void MeshMoldTool::setToolPosY(float y)
+{
+	m_toolPos.y = y;
+	if (!m_tracking) {
+		m_tracking = true;
+		if (TheTerrainRenderObject) {
+			Real height = TheTerrainRenderObject->getHeightMapHeight(m_toolPos.x, m_toolPos.y, nullptr);
+			MeshMoldOptions::setHeight(height);
+		}
+	}
+}
+
 /// Apply the tool.
 /** Apply the height mesh mold at the current point. */
 void MeshMoldTool::apply(CWorldBuilderDoc *pDoc)
@@ -200,20 +213,31 @@ void MeshMoldTool::applyMesh(CWorldBuilderDoc *pDoc)
 		}
 	}
 	Int border = m_htMapEditCopy->getBorderSize();
+	// TheSuperHackers @feature Nemellud 04/07/2026 EmbeddedMode: GetActive3DView() relies on MDI focus; fallback to s_instance
 	WbView3d *p3View = pDoc->GetActive3DView();
+	if (!p3View) p3View = WbView3d::s_instance;
 	if (p3View) {
 		DrawObject *pDraw = p3View->getDrawObject();
 		if (pDraw) {
+			// TheSuperHackers @feature Nemellud 04/07/2026 EmbeddedMode: force mesh load for pipe-driven apply
+			pDraw->updateMeshVB();
 			MeshClass *pMesh = pDraw->peekMesh();
 			if (pMesh) {
 				SphereClass bounds;
 				pDraw->getMeshBounds(&bounds);
-				bounds.Center *= MeshMoldOptions::getScale();
-				bounds.Radius *= MeshMoldOptions::getScale();
-				Int minX = ceil((m_toolPos.x+bounds.Center.X-bounds.Radius)/MAP_XY_FACTOR);
-				Int minY = ceil((m_toolPos.y+bounds.Center.Y-bounds.Radius)/MAP_XY_FACTOR);
-				Int maxX = floor((m_toolPos.x+bounds.Center.X+bounds.Radius)/MAP_XY_FACTOR);
-				Int maxY = floor((m_toolPos.y+bounds.Center.Y+bounds.Radius)/MAP_XY_FACTOR);
+				// TheSuperHackers @bugfix Nemellud 04/07/2026 EmbeddedMode: per-axis bounds so non-uniform stretch is not clipped to the unstretched radius
+				Real boundsSX = MeshMoldOptions::getScale() * MeshMoldOptions::getScaleX();
+				Real boundsSY = MeshMoldOptions::getScale() * MeshMoldOptions::getScaleY();
+				Vector3 boundsCenter = bounds.Center;
+				boundsCenter.Rotate_Z(MeshMoldOptions::getAngle()*PI/180.0f);
+				Real boundsCX = boundsCenter.X * boundsSX;
+				Real boundsCY = boundsCenter.Y * boundsSY;
+				Real boundsRX = bounds.Radius * boundsSX;
+				Real boundsRY = bounds.Radius * boundsSY;
+				Int minX = ceil((m_toolPos.x+boundsCX-boundsRX)/MAP_XY_FACTOR);
+				Int minY = ceil((m_toolPos.y+boundsCY-boundsRY)/MAP_XY_FACTOR);
+				Int maxX = floor((m_toolPos.x+boundsCX+boundsRX)/MAP_XY_FACTOR);
+				Int maxY = floor((m_toolPos.y+boundsCY+boundsRY)/MAP_XY_FACTOR);
 				maxX++; maxY++;
 				if (minX<0) minX = 0;
 				if (minY<0) minY = 0;
@@ -231,8 +255,9 @@ void MeshMoldTool::applyMesh(CWorldBuilderDoc *pDoc)
 						X -= m_toolPos.x;
 						Y = j*MAP_XY_FACTOR;
 						Y -= m_toolPos.y;
-						X /= MeshMoldOptions::getScale();
-						Y /= MeshMoldOptions::getScale();
+						// TheSuperHackers @feature Nemellud 04/07/2026 EmbeddedMode: non-uniform X/Y stretch
+						X /= (MeshMoldOptions::getScale() * MeshMoldOptions::getScaleX());
+						Y /= (MeshMoldOptions::getScale() * MeshMoldOptions::getScaleY());
 						Vector3 vLoc(X, Y, 10000);
 						vLoc.Rotate_Z(-MeshMoldOptions::getAngle()*PI/180.0f);
 

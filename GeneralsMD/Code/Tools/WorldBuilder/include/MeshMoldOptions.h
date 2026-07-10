@@ -104,7 +104,17 @@ public:
 	static void setRaiseOnly(Bool b) { m_raiseOnly = b; }
 	static void setLowerOnly(Bool b) { m_lowerOnly = b; }
 	static void applyMesh() { if (m_staticThis) m_staticThis->OnApplyMesh(); }
-	static AsciiString getModelName() {if (m_staticThis) return m_staticThis->m_meshModelName; return "";};
+	static AsciiString getModelName() { if (m_staticThis) return m_staticThis->m_meshModelName; return m_staticModelName; }
+	// TheSuperHackers @feature Nemellud 04/07/2026 EmbeddedMode: non-uniform X/Y stretch
+	static Real getScaleX() { return m_scaleX; }
+	static Real getScaleY() { return m_scaleY; }
+	static void setScaleX(Real v) { m_scaleX = v; }
+	static void setScaleY(Real v) { m_scaleY = v; }
+	static Real m_scaleX;
+	static Real m_scaleY;
+	// TheSuperHackers @feature Nemellud 04/07/2026 EmbeddedMode: select mold by name from pipe (works without panel open)
+	static void selectMold(const char* name);
+	static AsciiString m_staticModelName;
 
 public:	 //PopupSliderOwner methods.
 	virtual void GetPopSliderInfo(const long sliderID, long *pMin, long *pMax, long *pLineSize, long *pInitial) override;

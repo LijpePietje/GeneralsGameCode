@@ -35,6 +35,11 @@ MeshMoldOptions * MeshMoldOptions::m_staticThis=nullptr;
 Bool MeshMoldOptions::m_doingPreview=false;
 Bool MeshMoldOptions::m_raiseOnly=false;
 Bool MeshMoldOptions::m_lowerOnly=false;
+// TheSuperHackers @feature Nemellud 04/07/2026 EmbeddedMode: fallback model name when panel not open
+AsciiString MeshMoldOptions::m_staticModelName = "";
+// TheSuperHackers @feature Nemellud 04/07/2026 EmbeddedMode: non-uniform X/Y stretch (1.0 = no stretch)
+Real MeshMoldOptions::m_scaleX = 1.0f;
+Real MeshMoldOptions::m_scaleY = 1.0f;
 
 MeshMoldOptions::MeshMoldOptions(CWnd* pParent /*=nullptr*/)
 {
@@ -384,4 +389,12 @@ void MeshMoldOptions::OnLower()
 	if (m_doingPreview) {
 		MeshMoldTool::updateMeshLocation(false);
 	}
+}
+
+// TheSuperHackers @feature Nemellud 04/07/2026 EmbeddedMode: select mold by name from pipe
+void MeshMoldOptions::selectMold(const char* name)
+{
+	m_staticModelName = AsciiString(name);
+	if (m_staticThis)
+		m_staticThis->m_meshModelName = m_staticModelName;
 }

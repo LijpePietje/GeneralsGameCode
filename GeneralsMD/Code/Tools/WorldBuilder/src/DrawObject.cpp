@@ -352,8 +352,11 @@ void DrawObject::updateMeshVB()
 		curVb->u1 = 0;
 		curVb->v1 = 0;
 		Vector3 vLoc(pVert[i]);
-		vLoc *= MeshMoldOptions::getScale();
+		// TheSuperHackers @feature Nemellud 04/07/2026 EmbeddedMode: rotate first, then per-axis scale so preview matches applyMesh with non-uniform stretch
 		vLoc.Rotate_Z(MeshMoldOptions::getAngle()*PI/180.0f);
+		vLoc.X *= MeshMoldOptions::getScale() * MeshMoldOptions::getScaleX();
+		vLoc.Y *= MeshMoldOptions::getScale() * MeshMoldOptions::getScaleY();
+		vLoc.Z *= MeshMoldOptions::getScale();
 		vLoc.X += m_feedbackPoint.x;
 		vLoc.Y += m_feedbackPoint.y;
 		vLoc.Z += m_feedbackPoint.z;

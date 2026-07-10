@@ -177,6 +177,8 @@ protected:
 	afx_msg LRESULT OnWbMeshmoldSet(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbMeshmoldGet(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbMeshmoldAction(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbMeshmoldList(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbFloodfillAt(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbWaterSet(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbWaterGet(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbRampSet(WPARAM wParam, LPARAM lParam);

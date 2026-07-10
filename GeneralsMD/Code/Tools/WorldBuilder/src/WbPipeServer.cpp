@@ -16,6 +16,7 @@
 #include "WbPipeServer.h"
 #include "ShapeFillTool.h"
 #include "wbview3d.h"
+#include "resource.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,6 +39,8 @@ WbResizeMapReq g_wbResizeMapReq = {0,0,0,0,false,false,false,false,false};
 // TheSuperHackers @feature Nemellud 07/06/2026 EmbeddedMode: del_road sync struct
 struct WbDelRoadReq { float x1, y1; bool bridge; };
 WbDelRoadReq   g_wbDelRoadReq   = {0,0,false};
+// TheSuperHackers @feature Nemellud 04/07/2026 EmbeddedMode: floodfill_at shared request
+WbFloodfillAtReq g_wbFloodfillAtReq = {0,0,-1,0};
 extern int   g_wbScreenQuerySx;
 extern int   g_wbScreenQuerySy;
 
@@ -724,18 +727,55 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 	if (strcmp(cmd, "meshmold_set") == 0) {
 		int ival;
 		float fval;
-		if (JsonGetFloat(json, "scale",  &fval)) PostMessage(hwnd, WM_WB_MESHMOLD_SET, MESHMOLD_PROP_SCALE,     (LPARAM)(int)(fval * 100.0f));
-		if (JsonGetFloat(json, "height", &fval)) PostMessage(hwnd, WM_WB_MESHMOLD_SET, MESHMOLD_PROP_HEIGHT,    (LPARAM)(int)(fval * 100.0f));
-		if (JsonGetInt(json,   "angle",  &ival)) PostMessage(hwnd, WM_WB_MESHMOLD_SET, MESHMOLD_PROP_ANGLE,     (LPARAM)ival);
-		if (JsonGetInt(json,   "raiseOnly", &ival)) PostMessage(hwnd, WM_WB_MESHMOLD_SET, MESHMOLD_PROP_RAISEONLY, (LPARAM)ival);
-		if (JsonGetInt(json,   "lowerOnly", &ival)) PostMessage(hwnd, WM_WB_MESHMOLD_SET, MESHMOLD_PROP_LOWERONLY, (LPARAM)ival);
+		// TheSuperHackers @feature Nemellud 04/07/2026 EmbeddedMode: all props via SendMessage so they are committed before meshmold_action fires
+		if (JsonGetFloat(json, "scale",  &fval)) SendMessage(hwnd, WM_WB_MESHMOLD_SET, MESHMOLD_PROP_SCALE,     (LPARAM)(int)(fval * 100.0f));
+		if (JsonGetFloat(json, "height", &fval)) SendMessage(hwnd, WM_WB_MESHMOLD_SET, MESHMOLD_PROP_HEIGHT,    (LPARAM)(int)(fval * 100.0f));
+		if (JsonGetInt(json,   "angle",  &ival)) SendMessage(hwnd, WM_WB_MESHMOLD_SET, MESHMOLD_PROP_ANGLE,     (LPARAM)ival);
+		if (JsonGetInt(json,   "raiseOnly", &ival)) SendMessage(hwnd, WM_WB_MESHMOLD_SET, MESHMOLD_PROP_RAISEONLY, (LPARAM)ival);
+		if (JsonGetInt(json,   "lowerOnly", &ival)) SendMessage(hwnd, WM_WB_MESHMOLD_SET, MESHMOLD_PROP_LOWERONLY, (LPARAM)ival);
+		char model[128] = "";
+		if (JsonGetStr(json, "model", model, sizeof(model))) {
+			char* heap = new char[strlen(model) + 1];
+			strcpy(heap, model);
+			SendMessage(hwnd, WM_WB_MESHMOLD_SET, MESHMOLD_PROP_MODEL, (LPARAM)heap);
+		}
+		if (JsonGetFloat(json, "posX", &fval)) SendMessage(hwnd, WM_WB_MESHMOLD_SET, MESHMOLD_PROP_POS_X, (LPARAM)(int)(fval * 100.0f));
+		if (JsonGetFloat(json, "posY", &fval)) SendMessage(hwnd, WM_WB_MESHMOLD_SET, MESHMOLD_PROP_POS_Y, (LPARAM)(int)(fval * 100.0f));
+		if (JsonGetFloat(json, "posZ", &fval)) SendMessage(hwnd, WM_WB_MESHMOLD_SET, MESHMOLD_PROP_POS_Z, (LPARAM)(int)(fval * 100.0f));
+		if (JsonGetFloat(json, "scaleX", &fval)) SendMessage(hwnd, WM_WB_MESHMOLD_SET, MESHMOLD_PROP_SCALE_X, (LPARAM)(int)(fval * 100.0f));
+		if (JsonGetFloat(json, "scaleY", &fval)) SendMessage(hwnd, WM_WB_MESHMOLD_SET, MESHMOLD_PROP_SCALE_Y, (LPARAM)(int)(fval * 100.0f));
 		_snprintf(responseBuf, responseBufLen, "{\"ok\":true}");
 		return true;
 	}
 
+	if (strcmp(cmd, "meshmold_list") == 0) {
+		SendMessage(hwnd, WM_WB_MESHMOLD_LIST, (WPARAM)responseBufLen, (LPARAM)responseBuf);
+		return true;
+	}
+
 	if (strcmp(cmd, "meshmold_action") == 0) {
-		PostMessage(hwnd, WM_WB_MESHMOLD_ACTION, MESHMOLD_ACT_APPLY, 0);
+		SendMessage(hwnd, WM_WB_MESHMOLD_ACTION, MESHMOLD_ACT_APPLY, 0);
 		_snprintf(responseBuf, responseBufLen, "{\"ok\":true}");
+		return true;
+	}
+
+	// TheSuperHackers @feature Nemellud 04/07/2026 EmbeddedMode: activate mold tool in WB from pipe
+	if (strcmp(cmd, "meshmold_activate") == 0) {
+		PostMessage(hwnd, WM_COMMAND, ID_MOLD_TOOL, 0);
+		_snprintf(responseBuf, responseBufLen, "{\"ok\":true}");
+		return true;
+	}
+
+	if (strcmp(cmd, "floodfill_at") == 0) {
+		float fval;
+		int ival;
+		g_wbFloodfillAtReq = {0, 0, -1, 0};
+		if (JsonGetFloat(json, "wx", &fval)) g_wbFloodfillAtReq.wx = fval;
+		if (JsonGetFloat(json, "wy", &fval)) g_wbFloodfillAtReq.wy = fval;
+		if (JsonGetInt(json, "texClass", &ival)) g_wbFloodfillAtReq.texClass = ival;
+		if (JsonGetInt(json, "exact",    &ival)) g_wbFloodfillAtReq.exact    = ival;
+		int ok = (int)SendMessage(hwnd, WM_WB_FLOODFILL_AT, 0, 0);
+		_snprintf(responseBuf, responseBufLen, "{\"ok\":%s}", ok ? "true" : "false");
 		return true;
 	}
 

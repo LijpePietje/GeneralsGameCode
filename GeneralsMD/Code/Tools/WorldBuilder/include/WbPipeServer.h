@@ -163,8 +163,19 @@ private:
 #define WM_WB_RESET_LIGHTING  (WM_USER + 202)  // sync: restore EA factory-default lighting for all times of day
 // TheSuperHackers @feature Nemellud 03/07/2026 EmbeddedMode: absolute get/set of impassable-areas overlay
 #define WM_WB_IMPASSABLE_VIEW (WM_USER + 203)  // sync: wParam=-1 query / 0 off / 1 on; returns state 0/1
+// TheSuperHackers @feature Nemellud 04/07/2026 EmbeddedMode: mesh mold list + flood fill at position
+#define WM_WB_MESHMOLD_LIST  (WM_USER + 204)   // sync: list available .w3d molds; wParam=bufLen, lParam=char*
+#define WM_WB_FLOODFILL_AT   (WM_USER + 205)   // sync: flood fill texture at world position; reads g_wbFloodfillAtReq
 
 extern char g_wbSavePath[260];
+
+// TheSuperHackers @feature Nemellud 04/07/2026 EmbeddedMode: floodfill_at shared request struct
+struct WbFloodfillAtReq {
+	float wx, wy;    // world coordinates
+	int   texClass;  // texture class index; -1 = use current foreground class
+	int   exact;     // 1 = shiftKey equivalent (match exact texture only)
+};
+extern WbFloodfillAtReq g_wbFloodfillAtReq;
 
 struct WbNewMapReq {
 	int x, y, border, height;
@@ -265,6 +276,14 @@ struct WbPlantGroveReq {
 #define MESHMOLD_PROP_ANGLE     2
 #define MESHMOLD_PROP_RAISEONLY 3
 #define MESHMOLD_PROP_LOWERONLY 4
+// TheSuperHackers @feature Nemellud 04/07/2026 EmbeddedMode: model + position control
+#define MESHMOLD_PROP_MODEL     5  // lParam = heap char* (handler frees)
+#define MESHMOLD_PROP_POS_X     6  // lParam = x*100 (world units)
+#define MESHMOLD_PROP_POS_Y     7  // lParam = y*100
+#define MESHMOLD_PROP_POS_Z     8  // lParam = z*100
+// TheSuperHackers @feature Nemellud 04/07/2026 EmbeddedMode: non-uniform X/Y stretch
+#define MESHMOLD_PROP_SCALE_X   9  // lParam = ratio*100 (100=1.0x, default)
+#define MESHMOLD_PROP_SCALE_Y  10  // lParam = ratio*100
 
 // ── MeshMold action keys (WM_WB_MESHMOLD_ACTION wParam) ──────────────────────
 #define MESHMOLD_ACT_APPLY 0

@@ -60,5 +60,9 @@ public:  //Tool methods.
 
 public:	// Methods specific to MeshMoldTool.
 	static void updateMeshLocation(Bool changePreview);
+	// TheSuperHackers @feature Nemellud 04/07/2026 EmbeddedMode: set stamp position from pipe
+	static void setToolPosX(float x) { m_toolPos.x = x; }
+	static void setToolPosY(float y); ///< Enables tracking; first placement snaps height to terrain like native mouseDown.
+	static void setToolPosZ(float z) { m_toolPos.z = z; m_tracking = true; }
 
 };

@@ -106,6 +106,8 @@ public:
 
 	MeshClass *peekMesh() {return m_moldMesh;};
 	void getMeshBounds(SphereClass *pSphere) {*pSphere = m_moldMeshBounds;};
+	// TheSuperHackers @feature Nemellud 04/07/2026 EmbeddedMode: exposed for pipe-driven apply without render loop
+	void updateMeshVB();
 
 protected:
 	enum {MAX_RADIUS = 50, NUM_FEEDBACK_VERTEX = 201*201, NUM_FEEDBACK_INDEX = 101*101*6};
@@ -171,7 +173,6 @@ protected:
 	Int updateVB(DX8VertexBufferClass	*vertexBufferTile, Int color, Bool doArrow, Bool doDiamond);
 	void updatePolygonVB(PolygonTrigger *pTrig, Bool selected, Bool isOpen);
 	void updateFeedbackVB();
-	void updateMeshVB();
 	void updateRampVB();
 	void updateWaypointVB();
 	void updateForWater();
