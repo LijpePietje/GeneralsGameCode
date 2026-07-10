@@ -7,6 +7,14 @@ a REST API on `http://127.0.0.1:8099`, so scripts and AI agents can build maps.
 
 See [app/AI-DRIVING.md](app/AI-DRIVING.md) for the API guide.
 
+## Download (no build needed)
+
+Prebuilt binaries are on the
+[**Releases page**](https://github.com/LijpePietje/GeneralsGameCode/releases) —
+grab `WorldBuilderUI.exe`, `WorldBuilderZH.exe` and `Editor-Molds.zip`, follow
+the 3-step install in the release notes, and skip the build sections below
+entirely.
+
 ## What's in this folder
 
 ```
