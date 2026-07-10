@@ -55,6 +55,8 @@
 #include "FeatherOptions.h"
 #include "ScorchOptions.h"
 #include "MeshMoldOptions.h"
+#include "MeshMoldTool.h"
+#include "Common/FileSystem.h"
 #include "WaterOptions.h"
 #include "RampOptions.h"
 #include "ContourOptions.h"
@@ -110,6 +112,8 @@ BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
 	ON_MESSAGE(WM_WB_MESHMOLD_SET,    OnWbMeshmoldSet)
 	ON_MESSAGE(WM_WB_MESHMOLD_GET,    OnWbMeshmoldGet)
 	ON_MESSAGE(WM_WB_MESHMOLD_ACTION, OnWbMeshmoldAction)
+	ON_MESSAGE(WM_WB_MESHMOLD_LIST,   OnWbMeshmoldList)
+	ON_MESSAGE(WM_WB_FLOODFILL_AT,    OnWbFloodfillAt)
 	ON_MESSAGE(WM_WB_WATER_SET,       OnWbWaterSet)
 	ON_MESSAGE(WM_WB_WATER_GET,       OnWbWaterGet)
 	ON_MESSAGE(WM_WB_RAMP_SET,        OnWbRampSet)
@@ -1091,6 +1095,22 @@ LRESULT CMainFrame::OnWbMeshmoldSet(WPARAM wParam, LPARAM lParam)
 		case MESHMOLD_PROP_ANGLE:     MeshMoldOptions::setAngle((int)lParam);   break;
 		case MESHMOLD_PROP_RAISEONLY: MeshMoldOptions::setRaiseOnly(lParam != 0); break;
 		case MESHMOLD_PROP_LOWERONLY: MeshMoldOptions::setLowerOnly(lParam != 0); break;
+		// TheSuperHackers @feature Nemellud 04/07/2026 EmbeddedMode: model + world pos from pipe
+		case MESHMOLD_PROP_MODEL: {
+			char* name = (char*)lParam;
+			if (name) { MeshMoldOptions::selectMold(name); delete[] name; }
+			break;
+		}
+		case MESHMOLD_PROP_POS_X:   MeshMoldTool::setToolPosX((float)((int)lParam) / 100.0f); break;
+		case MESHMOLD_PROP_POS_Y:
+			MeshMoldTool::setToolPosY((float)((int)lParam) / 100.0f);
+			// TheSuperHackers @feature Nemellud 04/07/2026 EmbeddedMode: enable preview and update position when set via pipe
+			DrawObject::setDoMeshFeedback(true);
+			MeshMoldTool::updateMeshLocation(false);
+			break;
+		case MESHMOLD_PROP_POS_Z:   MeshMoldTool::setToolPosZ((float)((int)lParam) / 100.0f); break;
+		case MESHMOLD_PROP_SCALE_X: MeshMoldOptions::setScaleX((float)((int)lParam) / 100.0f); break;
+		case MESHMOLD_PROP_SCALE_Y: MeshMoldOptions::setScaleY((float)((int)lParam) / 100.0f); break;
 	}
 	return 0;
 }
@@ -1104,8 +1124,10 @@ LRESULT CMainFrame::OnWbMeshmoldGet(WPARAM wParam, LPARAM lParam)
 	char modelBuf[64] = "";
 	strncpy(modelBuf, MeshMoldOptions::getModelName().str(), sizeof(modelBuf) - 1);
 	_snprintf(buf, len,
-		"{\"ok\":true,\"scale\":%d,\"height\":%d,\"angle\":%d,\"raiseOnly\":%s,\"lowerOnly\":%s,\"model\":\"%s\"}",
+		"{\"ok\":true,\"scale\":%d,\"scaleX\":%d,\"scaleY\":%d,\"height\":%d,\"angle\":%d,\"raiseOnly\":%s,\"lowerOnly\":%s,\"model\":\"%s\"}",
 		(int)(MeshMoldOptions::getScale()  * 100.0f),
+		(int)(MeshMoldOptions::getScaleX() * 100.0f),
+		(int)(MeshMoldOptions::getScaleY() * 100.0f),
 		(int)(MeshMoldOptions::getHeight() * 100.0f),
 		MeshMoldOptions::getAngle(),
 		MeshMoldOptions::isRaisingOnly() ? "true" : "false",
@@ -1115,10 +1137,73 @@ LRESULT CMainFrame::OnWbMeshmoldGet(WPARAM wParam, LPARAM lParam)
 }
 
 // TheSuperHackers @feature Nemellud 25/05/2026 EmbeddedMode: apply meshmold from pipe
+// TheSuperHackers @feature Nemellud 04/07/2026 EmbeddedMode: call MeshMoldTool::apply directly so pipe works without panel open
 LRESULT CMainFrame::OnWbMeshmoldAction(WPARAM /*wParam*/, LPARAM /*lParam*/)
 {
-	MeshMoldOptions::applyMesh();
+	CWorldBuilderDoc *pDoc = CWorldBuilderDoc::GetActiveDoc();
+	if (pDoc) MeshMoldTool::apply(pDoc);
 	return 0;
+}
+
+// TheSuperHackers @feature Nemellud 04/07/2026 EmbeddedMode: list available .w3d molds via pipe
+LRESULT CMainFrame::OnWbMeshmoldList(WPARAM wParam, LPARAM lParam)
+{
+	char* buf = (char*)lParam;
+	int   maxLen = (int)wParam;
+	if (!buf || maxLen < 4) return 0;
+
+	FilenameList filenameList;
+	TheFileSystem->getFileListInDirectory(".\\data\\Editor\\Molds\\", "*.w3d", filenameList, FALSE);
+
+	int pos = 0;
+	pos += _snprintf(buf + pos, maxLen - pos, "{\"ok\":true,\"molds\":[");
+	bool first = true;
+	for (FilenameList::iterator it = filenameList.begin(); it != filenameList.end(); ++it) {
+		AsciiString filename = *it;
+		char tmp[_MAX_PATH];
+		strncpy(tmp, filename.str(), sizeof(tmp) - 1);
+		tmp[sizeof(tmp) - 1] = '\0';
+		// strip path prefix, keep only base name
+		char* nameStart = tmp;
+		for (int i = 0; tmp[i]; i++)
+			if (tmp[i] == '\\' || tmp[i] == '/') nameStart = tmp + i + 1;
+		// strip .w3d extension
+		for (int i = (int)strlen(nameStart) - 1; i > 0; i--) {
+			if (nameStart[i] == '.') { nameStart[i] = '\0'; break; }
+		}
+		pos += _snprintf(buf + pos, maxLen - pos, "%s\"%s\"", first ? "" : ",", nameStart);
+		first = false;
+	}
+	pos += _snprintf(buf + pos, maxLen - pos, "]}");
+	return 0;
+}
+
+// TheSuperHackers @feature Nemellud 04/07/2026 EmbeddedMode: flood fill texture at world position via pipe
+LRESULT CMainFrame::OnWbFloodfillAt(WPARAM /*wParam*/, LPARAM /*lParam*/)
+{
+	CWorldBuilderDoc *pDoc = CWorldBuilderDoc::GetActiveDoc();
+	if (!pDoc) return 0;
+
+	Coord3D cpt = {g_wbFloodfillAtReq.wx, g_wbFloodfillAtReq.wy, 0};
+	CPoint ndx;
+	if (!pDoc->getCellIndexFromCoord(cpt, &ndx)) return 0;
+
+	int texClass = g_wbFloodfillAtReq.texClass;
+	if (texClass < 0) texClass = TerrainMaterial::getFgTexClass();
+	Bool shiftKey = (g_wbFloodfillAtReq.exact != 0);
+
+	WorldHeightMapEdit *htMapEditCopy = pDoc->GetHeightMap()->duplicate();
+	Bool didIt = htMapEditCopy->floodFill(ndx.x, ndx.y, texClass, shiftKey);
+	if (didIt) {
+		htMapEditCopy->optimizeTiles();
+		IRegion2D partialRange = {0, 0, 0, 0};
+		pDoc->updateHeightMap(htMapEditCopy, false, partialRange);
+		WBDocUndoable *pUndo = new WBDocUndoable(pDoc, htMapEditCopy);
+		pDoc->AddAndDoUndoable(pUndo);
+		REF_PTR_RELEASE(pUndo);
+	}
+	REF_PTR_RELEASE(htMapEditCopy);
+	return didIt ? 1 : 0;
 }
 
 // ── Tier C — WaterTool ───────────────────────────────────────────────────────
@@ -2771,6 +2856,16 @@ LRESULT CMainFrame::OnWbPipeCmd(WPARAM wParam, LPARAM lParam)
 // TheSuperHackers @feature Nemellud 06/06/2026 EmbeddedMode: create new map via pipe (no native dialog)
 LRESULT CMainFrame::OnWbNewMap(WPARAM, LPARAM)
 {
+	// TheSuperHackers @bugfix Nemellud 08/07/2026 EmbeddedMode: ID_FILE_NEW goes through MFC's
+	// default CDocument::SaveModified(), which pops a native "save changes?" dialog if the
+	// current doc is dirty - that dialog blocks this pipe command indefinitely (the pipe has
+	// no way to click it), silently stalling every pipe-driven new_map call until a human
+	// happens to notice and dismiss it. A pipe-driven "new map" request already means the
+	// caller intends to discard the current map, so clear the modified flag first - same
+	// intent as resize_map/ResizeFromPipe just above, which never goes through this MFC
+	// check at all.
+	CWorldBuilderDoc* pDoc = (CWorldBuilderDoc*)GetActiveDocument();
+	if (pDoc) pDoc->SetModifiedFlag(FALSE);
 	// g_wbNewMapReq is already set by WbPipeServer; trigger File New to invoke OnNewDocument
 	PostMessage(WM_COMMAND, ID_FILE_NEW, 0);
 	return 0;
