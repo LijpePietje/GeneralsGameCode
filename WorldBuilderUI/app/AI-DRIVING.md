@@ -85,16 +85,36 @@ curl -X POST localhost:8099/api/map/save_to -H "Content-Type: application/json" 
 ## Using it with Claude Code
 
 Point Claude Code at the API and let it iterate. A starter instruction that
-works well — drop it in your project's `CLAUDE.md` or paste it as a prompt:
+works well — drop it in your project's `CLAUDE.md` or paste it as a prompt
+(the 🤖 AI button in the editor's toolbar copies this same text):
 
 ```markdown
 A C&C Generals Zero Hour map editor is running with a REST API on
-http://127.0.0.1:8099. Check /api/status first (wbReady and pipeReady must be
-true). Coordinates: 1 cell = 10 world units; most endpoints take world units,
-ShapeFill endpoints take cell coordinates. After EVERY mutation, verify with a
-GET endpoint (/api/map/ground_height, /api/map/objects, /api/map/waypoints)
-before moving on - never assume a change worked. If requests start timing out,
-tell me to check for a blocking dialog in the WorldBuilder window.
+http://127.0.0.1:8099 - 110+ endpoints covering the full editor (terrain,
+textures, objects, waypoints, roads, players/teams/scripts, camera). The list
+below is only a starter kit; the full endpoint map is in the guide (AI-DRIVING.md).
+
+Workflow rules:
+- First GET /api/status and wait until wbReady AND pipeReady are true (~15s
+  after launch). POSTs take JSON bodies (Content-Type: application/json).
+- Responses say {ok:true|false}. ok:true means "command accepted", NOT "it
+  worked" - after EVERY mutation, verify with a GET (/api/map/info,
+  /api/map/ground_height?wx=&wy=, /api/map/objects, /api/map/waypoints)
+  before moving on.
+- Coordinates: 1 cell = 10 world units. Most endpoints take world units
+  (wx/wy/posX/posY); ShapeFill endpoints (/api/shapefill/*) take CELL
+  coordinates (world / 10).
+- If requests hang or time out: a native WorldBuilder dialog is probably
+  blocking - ask me to dismiss it instead of retrying.
+
+Starter endpoints: /api/map/new {x,y,border,height} - /api/meshmold/set+action
+(stamp height molds, posX/posY world units) - /api/shapefill/create (shapes
+with height gradients + textures, cell coords) - /api/floodfill -
+/api/place/object {template,wx,wy} - /api/place/waypoint {name,wx,wy}
+(Player_1_Start, Player_2_Start... must be sequential, no gaps) -
+/api/sidelist/add_skirmish - /api/map/undo - /api/map/save_to {path}.
+Save maps where the game finds them:
+%USERPROFILE%\Documents\Command and Conquer Generals Zero Hour Data\Maps\<Name>\<Name>.map
 ```
 
 Then ask for what you want: *"Build a 1v1 desert map with a defensible hill in
