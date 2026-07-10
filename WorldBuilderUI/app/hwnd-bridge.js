@@ -16,12 +16,12 @@ const fs   = require('fs');
 const path = require('path');
 const { app } = require('electron');
 
-// Same resolution as main.js's getAppDir() - __dirname points inside the read-only
-// asar archive in a packaged build, not somewhere writable next to the exe.
+// main.js probes for a writable dir at startup (game folder, falling back to the
+// per-user data dir when Program Files is UAC-read-only) and exports the result.
 const APP_DIR = process.env.PORTABLE_EXECUTABLE_DIR
   ? process.env.PORTABLE_EXECUTABLE_DIR
   : (app.isPackaged ? path.dirname(process.execPath) : __dirname);
-const LOG_FILE = path.join(APP_DIR, 'debug.log');
+const LOG_FILE = path.join(process.env.WB_UI_DATA_DIR || APP_DIR, 'debug.log');
 function log(...args) {
   const line = args.map(a => String(a)).join(' ');
   console.log(line);

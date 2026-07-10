@@ -15,30 +15,43 @@ const path = require('path');
 // process - electron.app is directly available, no renderer/.remote concerns.
 const { app } = require('electron');
 
-// Same resolution as main.js's getAppDir(): a writable folder next to the actual
+// Same resolution as main.js's getAppDir(): the folder next to the actual
 // launcher exe (portable build) or this source folder (dev). __dirname alone
 // would point inside the read-only asar archive in a packaged build.
 const APP_DIR = process.env.PORTABLE_EXECUTABLE_DIR
   ? process.env.PORTABLE_EXECUTABLE_DIR
   : (app.isPackaged ? path.dirname(process.execPath) : __dirname);
+// Where to WRITE: main.js probes APP_DIR for writability at startup and exports
+// the result (falls back to the per-user data dir when the game folder is a
+// UAC-protected Program Files location - writing there is EPERM for normal users).
+const DATA_DIR = process.env.WB_UI_DATA_DIR || APP_DIR;
 // Bundled read-only assets (icons, textures, object-name lists) live outside this
 // folder in the dev repo (parent dir) but get copied under resourcesPath by
 // electron-builder's extraResources in a packaged build - see package.json.
 const RESOURCES_DIR = app.isPackaged ? process.resourcesPath : path.join(__dirname, '..');
 
 // ── File logger (always writes, even when started via start.bat) ──────────────
-const LOG_PATH = path.join(APP_DIR, 'debug.log');
-const _logStream = fs.createWriteStream(LOG_PATH, { flags: 'a' });
+// createWriteStream does NOT throw synchronously on a read-only folder - it
+// emits an async 'error' event, and an unhandled stream error is an UNCAUGHT
+// EXCEPTION that takes down the whole app (seen in the wild as "EPERM: operation
+// not permitted, open ...debug.log" on a machine where the game folder wasn't
+// writable). Handle the error and degrade to console-only logging.
+const LOG_PATH = path.join(DATA_DIR, 'debug.log');
+let _logStream = null;
+try {
+  _logStream = fs.createWriteStream(LOG_PATH, { flags: 'a' });
+  _logStream.on('error', () => { _logStream = null; });
+} catch { _logStream = null; }
 function dbg(...args) {
   const line = '[' + new Date().toISOString() + '] ' + args.join(' ');
-  _logStream.write(line + '\n');
+  if (_logStream) { try { _logStream.write(line + '\n'); } catch {} }
   process.stdout.write(line + '\n');
 }
 
 // ── Open Map dialog — user-managed scan directories ────────────────────────────
 // Replaces the old hardcoded MAP_SCAN_DIRS list with a persisted, user-editable one
 // (add/remove folders from the "Open Map" dialog instead of editing source).
-const SCAN_DIRS_PATH = path.join(APP_DIR, 'data', 'map-scan-dirs.json');
+const SCAN_DIRS_PATH = path.join(DATA_DIR, 'data', 'map-scan-dirs.json');
 // A packaged build sits directly in the user's game folder (APP_DIR), so its own
 // Maps\ subfolder is a sensible universal default - unlike the old hardcoded list
 // below, which only ever made sense on this dev machine. The dev-only extras stay
@@ -61,14 +74,22 @@ function getScanDirs() {
   try {
     return JSON.parse(fs.readFileSync(SCAN_DIRS_PATH, 'utf8'));
   } catch {
-    fs.mkdirSync(path.dirname(SCAN_DIRS_PATH), { recursive: true });
-    fs.writeFileSync(SCAN_DIRS_PATH, JSON.stringify(DEFAULT_SCAN_DIRS, null, 1));
+    // Seeding the default file is best-effort: on a machine where even DATA_DIR
+    // writes fail, the dialog still works with in-memory defaults.
+    try {
+      fs.mkdirSync(path.dirname(SCAN_DIRS_PATH), { recursive: true });
+      fs.writeFileSync(SCAN_DIRS_PATH, JSON.stringify(DEFAULT_SCAN_DIRS, null, 1));
+    } catch {}
     return DEFAULT_SCAN_DIRS.slice();
   }
 }
 function saveScanDirs(dirs) {
-  fs.mkdirSync(path.dirname(SCAN_DIRS_PATH), { recursive: true });
-  fs.writeFileSync(SCAN_DIRS_PATH, JSON.stringify(dirs, null, 1));
+  try {
+    fs.mkdirSync(path.dirname(SCAN_DIRS_PATH), { recursive: true });
+    fs.writeFileSync(SCAN_DIRS_PATH, JSON.stringify(dirs, null, 1));
+  } catch (e) {
+    dbg(`[scandirs] save failed (folder not writable?): ${e.message}`);
+  }
 }
 
 // ── Object palette — parsed from REAL_OBJECT_NAMES.txt (1869 objects) ─────────

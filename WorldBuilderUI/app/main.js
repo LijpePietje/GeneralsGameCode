@@ -2,12 +2,10 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs   = require('fs');
-const bridge    = require('./hwnd-bridge');
-const apiServer = require('./api-server');
 
-// Where to look for WorldBuilderZH.exe and where to put debug.log - resolved so
-// the SAME code works in dev (`npm start`, __dirname = this source folder) and
-// in a packaged portable .exe dropped into someone else's game folder.
+// Where to look for WorldBuilderZH.exe - resolved so the SAME code works in dev
+// (`npm start`, __dirname = this source folder) and in a packaged portable .exe
+// dropped into someone else's game folder.
 // electron-builder's "portable" Windows target self-extracts to a temp folder at
 // runtime, so process.execPath there points at that temp copy, not the real
 // location the user placed the .exe - it sets PORTABLE_EXECUTABLE_DIR specifically
@@ -19,11 +17,32 @@ function getAppDir() {
 }
 const APP_DIR = getAppDir();
 
-// Log file next to the launcher exe (or main.js in dev) for easy debugging.
-// Non-fatal if the folder isn't writable (e.g. Program Files without admin) -
-// logging then only goes to the console instead of killing the whole app.
-const LOG_FILE = path.join(APP_DIR, 'debug.log');
-try { fs.writeFileSync(LOG_FILE, `=== Session ${new Date().toISOString()} ===\n`); } catch {}
+// Where to WRITE (debug.log, settings). The game folder often lives under
+// Program Files, which UAC makes read-only for normal users - on such machines
+// any write there is EPERM and must never take the app down. Probe once with a
+// real file write (a directory access check isn't reliable for this on Windows),
+// and fall back to Electron's per-user data folder, which is always writable.
+function pickWritableDir(preferred) {
+  try {
+    const probe = path.join(preferred, '.wb-write-test');
+    fs.writeFileSync(probe, '');
+    fs.unlinkSync(probe);
+    return preferred;
+  } catch {
+    try { return app.getPath('userData'); } catch { return require('os').tmpdir(); }
+  }
+}
+const DATA_DIR = pickWritableDir(APP_DIR);
+// hwnd-bridge.js and api-server.js write logs/settings too - hand them the
+// resolved dir via env so all three agree without a shared module.
+process.env.WB_UI_DATA_DIR = DATA_DIR;
+
+const bridge    = require('./hwnd-bridge');
+const apiServer = require('./api-server');
+
+// Log file next to the launcher exe when possible, else in the user-data dir.
+const LOG_FILE = path.join(DATA_DIR, 'debug.log');
+try { fs.writeFileSync(LOG_FILE, `=== Session ${new Date().toISOString()} ===\nAPP_DIR=${APP_DIR}\nDATA_DIR=${DATA_DIR}\n`); } catch {}
 
 function log(...args) {
   const line = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
