@@ -168,6 +168,8 @@ private:
 #define WM_WB_FLOODFILL_AT   (WM_USER + 205)   // sync: flood fill texture at world position; reads g_wbFloodfillAtReq
 // TheSuperHackers @feature Nemellud 17/07/2026 EmbeddedMode: blit full height field via pipe (chunked row bands)
 #define WM_WB_HEIGHT_BLIT    (WM_USER + 206)   // sync: write height band into pending copy; reads g_wbHeightBlitReq
+// TheSuperHackers @feature Nemellud 17/07/2026 EmbeddedMode: blit texture-class field via pipe (chunked row bands)
+#define WM_WB_TEXTURE_BLIT   (WM_USER + 207)   // sync: write texture band into pending copy; reads g_wbTextureBlitReq
 
 extern char g_wbSavePath[260];
 
@@ -189,6 +191,17 @@ struct WbHeightBlitReq {
 	const unsigned char* data;   // w*h bytes, row-major; owned by pipe thread
 };
 extern WbHeightBlitReq g_wbHeightBlitReq;
+
+// TheSuperHackers @feature Nemellud 17/07/2026 EmbeddedMode: texture blit shared request struct
+// Same chunk protocol as WbHeightBlitReq; each byte is a texture CLASS index,
+// 255 = leave cell unchanged (mask sentinel).
+struct WbTextureBlitReq {
+	int x, y, w, h;
+	int first;
+	int commit;
+	const unsigned char* data;
+};
+extern WbTextureBlitReq g_wbTextureBlitReq;
 
 struct WbNewMapReq {
 	int x, y, border, height;

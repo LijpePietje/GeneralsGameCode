@@ -200,6 +200,8 @@ protected:
 	afx_msg LRESULT OnWbMapHeightSet(WPARAM wParam, LPARAM lParam);
 	// TheSuperHackers @feature Nemellud 17/07/2026 EmbeddedMode: height blit handler
 	afx_msg LRESULT OnWbHeightBlit(WPARAM wParam, LPARAM lParam);
+	// TheSuperHackers @feature Nemellud 17/07/2026 EmbeddedMode: texture blit handler
+	afx_msg LRESULT OnWbTextureBlit(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbPlaceWaypoint(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbLinkWaypoints(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbPlaceObject(WPARAM wParam, LPARAM lParam);

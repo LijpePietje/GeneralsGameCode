@@ -43,6 +43,8 @@ WbDelRoadReq   g_wbDelRoadReq   = {0,0,false};
 WbFloodfillAtReq g_wbFloodfillAtReq = {0,0,-1,0};
 // TheSuperHackers @feature Nemellud 17/07/2026 EmbeddedMode: height blit shared request
 WbHeightBlitReq g_wbHeightBlitReq = {0,0,0,0,1,1,nullptr};
+// TheSuperHackers @feature Nemellud 17/07/2026 EmbeddedMode: texture blit shared request
+WbTextureBlitReq g_wbTextureBlitReq = {0,0,0,0,1,1,nullptr};
 extern int   g_wbScreenQuerySx;
 extern int   g_wbScreenQuerySy;
 
@@ -932,6 +934,44 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 		g_wbHeightBlitReq.data = buf;
 		int written = (int)SendMessage(hwnd, WM_WB_HEIGHT_BLIT, 0, 0);
 		g_wbHeightBlitReq.data = nullptr;
+		delete[] buf;
+		_snprintf(responseBuf, responseBufLen, "{\"ok\":true,\"cells\":%d}", written);
+		return true;
+	}
+
+	// TheSuperHackers @feature Nemellud 17/07/2026 EmbeddedMode: blit texture-class field row band via pipe
+	if (strcmp(cmd, "map_texture_blit") == 0) {
+		int ival;
+		g_wbTextureBlitReq = {0,0,0,0,0,1,nullptr};
+		if (JsonGetInt(json, "x",      &ival)) g_wbTextureBlitReq.x      = ival;
+		if (JsonGetInt(json, "y",      &ival)) g_wbTextureBlitReq.y      = ival;
+		if (JsonGetInt(json, "w",      &ival)) g_wbTextureBlitReq.w      = ival;
+		if (JsonGetInt(json, "h",      &ival)) g_wbTextureBlitReq.h      = ival;
+		if (JsonGetInt(json, "first",  &ival)) g_wbTextureBlitReq.first  = ival;
+		if (JsonGetInt(json, "commit", &ival)) g_wbTextureBlitReq.commit = ival;
+
+		int expect = g_wbTextureBlitReq.w * g_wbTextureBlitReq.h;
+		if (expect <= 0 || expect > 1024 * 1024) {
+			_snprintf(responseBuf, responseBufLen, "{\"ok\":false,\"error\":\"bad dimensions\"}");
+			return true;
+		}
+		const char* p = strstr(json, "\"data\"");
+		if (p) { p += 6; while (*p == ' ' || *p == ':') p++; if (*p == '"') p++; else p = nullptr; }
+		if (!p) {
+			_snprintf(responseBuf, responseBufLen, "{\"ok\":false,\"error\":\"missing data\"}");
+			return true;
+		}
+		unsigned char* buf = new unsigned char[expect];
+		int decoded = Base64Decode(p, buf, expect);
+		if (decoded != expect) {
+			delete[] buf;
+			_snprintf(responseBuf, responseBufLen,
+			          "{\"ok\":false,\"error\":\"data length %d != w*h %d\"}", decoded, expect);
+			return true;
+		}
+		g_wbTextureBlitReq.data = buf;
+		int written = (int)SendMessage(hwnd, WM_WB_TEXTURE_BLIT, 0, 0);
+		g_wbTextureBlitReq.data = nullptr;
 		delete[] buf;
 		_snprintf(responseBuf, responseBufLen, "{\"ok\":true,\"cells\":%d}", written);
 		return true;

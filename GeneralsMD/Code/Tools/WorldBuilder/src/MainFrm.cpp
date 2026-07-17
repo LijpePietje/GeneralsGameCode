@@ -133,6 +133,7 @@ BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
 	ON_MESSAGE(WM_WB_SF_CREATE_PIPE,   OnWbSfCreatePipe)
 	ON_MESSAGE(WM_WB_MAP_HEIGHT_SET,   OnWbMapHeightSet)
 	ON_MESSAGE(WM_WB_HEIGHT_BLIT,      OnWbHeightBlit)
+	ON_MESSAGE(WM_WB_TEXTURE_BLIT,     OnWbTextureBlit)
 	ON_MESSAGE(WM_WB_PLACE_WAYPOINT,   OnWbPlaceWaypoint)
 	ON_MESSAGE(WM_WB_LINK_WAYPOINTS,   OnWbLinkWaypoints)
 	ON_MESSAGE(WM_WB_PLACE_OBJECT_PIPE,OnWbPlaceObject)
@@ -1926,6 +1927,55 @@ LRESULT CMainFrame::OnWbHeightBlit(WPARAM, LPARAM)
 		REF_PTR_RELEASE(pUndo);
 		REF_PTR_RELEASE(s_wbBlitCopy);
 		s_wbBlitCopy = nullptr;
+	}
+	return written;
+}
+
+// TheSuperHackers @feature Nemellud 17/07/2026 EmbeddedMode: blit texture-class field via pipe.
+// Same chunk protocol as height blit: bands accumulate in a pending copy, the commit
+// call bakes tiles (optimizeTiles) and applies everything as one WBDocUndoable.
+// Byte value 255 = leave cell unchanged, so callers can paint with masks.
+extern WbTextureBlitReq g_wbTextureBlitReq;
+static WorldHeightMapEdit* s_wbTexBlitCopy = nullptr;
+
+LRESULT CMainFrame::OnWbTextureBlit(WPARAM, LPARAM)
+{
+	CWorldBuilderDoc* pDoc = (CWorldBuilderDoc*)GetActiveDocument();
+	if (!pDoc || !pDoc->GetHeightMap() || !g_wbTextureBlitReq.data) return 0;
+	const WbTextureBlitReq& r = g_wbTextureBlitReq;
+
+	if (r.first && s_wbTexBlitCopy) {
+		REF_PTR_RELEASE(s_wbTexBlitCopy);
+		s_wbTexBlitCopy = nullptr;
+	}
+	if (s_wbTexBlitCopy == nullptr)
+		s_wbTexBlitCopy = pDoc->GetHeightMap()->duplicate();
+
+	int mapW = s_wbTexBlitCopy->getXExtent();
+	int mapH = s_wbTexBlitCopy->getYExtent();
+	int written = 0;
+	for (int j = 0; j < r.h; j++) {
+		int my = r.y + j;
+		if (my < 0 || my >= mapH) continue;
+		for (int i = 0; i < r.w; i++) {
+			int mx = r.x + i;
+			if (mx < 0 || mx >= mapW) continue;
+			unsigned char texClass = r.data[j * r.w + i];
+			if (texClass == 255) continue;
+			if (s_wbTexBlitCopy->setTileNdx(mx, my, texClass, false))
+				written++;
+		}
+	}
+
+	if (r.commit) {
+		s_wbTexBlitCopy->optimizeTiles();
+		IRegion2D range = {0, 0, 0, 0};
+		pDoc->updateHeightMap(s_wbTexBlitCopy, false, range);
+		WBDocUndoable* pUndo = new WBDocUndoable(pDoc, s_wbTexBlitCopy);
+		pDoc->AddAndDoUndoable(pUndo);
+		REF_PTR_RELEASE(pUndo);
+		REF_PTR_RELEASE(s_wbTexBlitCopy);
+		s_wbTexBlitCopy = nullptr;
 	}
 	return written;
 }
