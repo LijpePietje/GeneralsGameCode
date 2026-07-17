@@ -198,6 +198,8 @@ protected:
 	// TheSuperHackers @feature Nemellud 25/05/2026 EmbeddedMode: Tier I terrain write handlers
 	afx_msg LRESULT OnWbSfCreatePipe(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbMapHeightSet(WPARAM wParam, LPARAM lParam);
+	// TheSuperHackers @feature Nemellud 17/07/2026 EmbeddedMode: height blit handler
+	afx_msg LRESULT OnWbHeightBlit(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbPlaceWaypoint(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbLinkWaypoints(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbPlaceObject(WPARAM wParam, LPARAM lParam);

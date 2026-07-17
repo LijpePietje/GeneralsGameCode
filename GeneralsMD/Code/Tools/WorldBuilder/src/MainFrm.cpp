@@ -132,6 +132,7 @@ BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
 	ON_MESSAGE(WM_WB_GET_SELECTED,    OnWbGetSelected)
 	ON_MESSAGE(WM_WB_SF_CREATE_PIPE,   OnWbSfCreatePipe)
 	ON_MESSAGE(WM_WB_MAP_HEIGHT_SET,   OnWbMapHeightSet)
+	ON_MESSAGE(WM_WB_HEIGHT_BLIT,      OnWbHeightBlit)
 	ON_MESSAGE(WM_WB_PLACE_WAYPOINT,   OnWbPlaceWaypoint)
 	ON_MESSAGE(WM_WB_LINK_WAYPOINTS,   OnWbLinkWaypoints)
 	ON_MESSAGE(WM_WB_PLACE_OBJECT_PIPE,OnWbPlaceObject)
@@ -1881,6 +1882,52 @@ LRESULT CMainFrame::OnWbMapHeightSet(WPARAM, LPARAM)
 	IRegion2D range = {0, 0, 0, 0};
 	pDoc->updateHeightMap(pMap, false, range);
 	return 0;
+}
+
+// TheSuperHackers @feature Nemellud 17/07/2026 EmbeddedMode: blit height field via pipe.
+// Chunked: each call writes one row band into a pending heightmap copy; the commit call
+// applies the whole copy as a single WBDocUndoable (one Ctrl+Z per logical blit).
+extern WbHeightBlitReq g_wbHeightBlitReq;
+static WorldHeightMapEdit* s_wbBlitCopy = nullptr;
+
+LRESULT CMainFrame::OnWbHeightBlit(WPARAM, LPARAM)
+{
+	CWorldBuilderDoc* pDoc = (CWorldBuilderDoc*)GetActiveDocument();
+	if (!pDoc || !pDoc->GetHeightMap() || !g_wbHeightBlitReq.data) return 0;
+	const WbHeightBlitReq& r = g_wbHeightBlitReq;
+
+	if (r.first && s_wbBlitCopy) {
+		// stale copy from an aborted chunk sequence — discard, start fresh
+		REF_PTR_RELEASE(s_wbBlitCopy);
+		s_wbBlitCopy = nullptr;
+	}
+	if (s_wbBlitCopy == nullptr)
+		s_wbBlitCopy = pDoc->GetHeightMap()->duplicate();
+
+	int mapW = s_wbBlitCopy->getXExtent();
+	int mapH = s_wbBlitCopy->getYExtent();
+	int written = 0;
+	for (int j = 0; j < r.h; j++) {
+		int my = r.y + j;
+		if (my < 0 || my >= mapH) continue;
+		for (int i = 0; i < r.w; i++) {
+			int mx = r.x + i;
+			if (mx < 0 || mx >= mapW) continue;
+			s_wbBlitCopy->setHeight(mx, my, r.data[j * r.w + i]);
+			written++;
+		}
+	}
+
+	if (r.commit) {
+		IRegion2D range = {0, 0, 0, 0};
+		pDoc->updateHeightMap(s_wbBlitCopy, false, range);
+		WBDocUndoable* pUndo = new WBDocUndoable(pDoc, s_wbBlitCopy);
+		pDoc->AddAndDoUndoable(pUndo);
+		REF_PTR_RELEASE(pUndo);
+		REF_PTR_RELEASE(s_wbBlitCopy);
+		s_wbBlitCopy = nullptr;
+	}
+	return written;
 }
 
 // TheSuperHackers @feature Nemellud 25/05/2026 EmbeddedMode: place named waypoint at world coords

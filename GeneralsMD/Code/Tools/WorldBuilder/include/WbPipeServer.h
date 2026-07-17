@@ -166,6 +166,8 @@ private:
 // TheSuperHackers @feature Nemellud 04/07/2026 EmbeddedMode: mesh mold list + flood fill at position
 #define WM_WB_MESHMOLD_LIST  (WM_USER + 204)   // sync: list available .w3d molds; wParam=bufLen, lParam=char*
 #define WM_WB_FLOODFILL_AT   (WM_USER + 205)   // sync: flood fill texture at world position; reads g_wbFloodfillAtReq
+// TheSuperHackers @feature Nemellud 17/07/2026 EmbeddedMode: blit full height field via pipe (chunked row bands)
+#define WM_WB_HEIGHT_BLIT    (WM_USER + 206)   // sync: write height band into pending copy; reads g_wbHeightBlitReq
 
 extern char g_wbSavePath[260];
 
@@ -176,6 +178,17 @@ struct WbFloodfillAtReq {
 	int   exact;     // 1 = shiftKey equivalent (match exact texture only)
 };
 extern WbFloodfillAtReq g_wbFloodfillAtReq;
+
+// TheSuperHackers @feature Nemellud 17/07/2026 EmbeddedMode: height blit shared request struct
+// One logical blit = N chunked calls (row bands, pipe line buffer is 64KB). first=1 starts a
+// fresh pending heightmap copy; commit=1 pushes the copy as a single WBDocUndoable.
+struct WbHeightBlitReq {
+	int x, y, w, h;              // destination rect in cell coordinates (row band)
+	int first;                   // 1 = discard stale pending copy, start fresh
+	int commit;                  // 1 = final chunk: apply + create undoable
+	const unsigned char* data;   // w*h bytes, row-major; owned by pipe thread
+};
+extern WbHeightBlitReq g_wbHeightBlitReq;
 
 struct WbNewMapReq {
 	int x, y, border, height;

@@ -41,6 +41,8 @@ struct WbDelRoadReq { float x1, y1; bool bridge; };
 WbDelRoadReq   g_wbDelRoadReq   = {0,0,false};
 // TheSuperHackers @feature Nemellud 04/07/2026 EmbeddedMode: floodfill_at shared request
 WbFloodfillAtReq g_wbFloodfillAtReq = {0,0,-1,0};
+// TheSuperHackers @feature Nemellud 17/07/2026 EmbeddedMode: height blit shared request
+WbHeightBlitReq g_wbHeightBlitReq = {0,0,0,0,1,1,nullptr};
 extern int   g_wbScreenQuerySx;
 extern int   g_wbScreenQuerySy;
 
@@ -224,6 +226,35 @@ static bool JsonGetFloat(const char* json, const char* key, float* out)
 	if (*p == '"') p++;
 	if ((*p >= '0' && *p <= '9') || *p == '-') { *out = (float)atof(p); return true; }
 	return false;
+}
+
+// TheSuperHackers @feature Nemellud 17/07/2026 EmbeddedMode: base64 decode for map_height_blit payloads
+static int Base64DecodeChar(char c)
+{
+	if (c >= 'A' && c <= 'Z') return c - 'A';
+	if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+	if (c >= '0' && c <= '9') return c - '0' + 52;
+	if (c == '+') return 62;
+	if (c == '/') return 63;
+	return -1;
+}
+
+// Decodes base64 from src up to the first '"', '=' or NUL. Returns bytes written, or -1 on overflow.
+static int Base64Decode(const char* src, unsigned char* dst, int dstMax)
+{
+	int acc = 0, bits = 0, n = 0;
+	for (; *src && *src != '"' && *src != '='; src++) {
+		int v = Base64DecodeChar(*src);
+		if (v < 0) continue;
+		acc = (acc << 6) | v;
+		bits += 6;
+		if (bits >= 8) {
+			bits -= 8;
+			if (n >= dstMax) return -1;
+			dst[n++] = (unsigned char)((acc >> bits) & 0xFF);
+		}
+	}
+	return n;
 }
 
 // ── View toggle lookup table ──────────────────────────────────────────────────
@@ -865,6 +896,44 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 		if (JsonGetInt(json, "value", &ival)) g_wbPipeHeightRect.val = ival;
 		SendMessage(hwnd, WM_WB_MAP_HEIGHT_SET, 0, 0);
 		_snprintf(responseBuf, responseBufLen, "{\"ok\":true}");
+		return true;
+	}
+
+	// TheSuperHackers @feature Nemellud 17/07/2026 EmbeddedMode: blit height field row band via pipe
+	if (strcmp(cmd, "map_height_blit") == 0) {
+		int ival;
+		g_wbHeightBlitReq = {0,0,0,0,0,1,nullptr};
+		if (JsonGetInt(json, "x",      &ival)) g_wbHeightBlitReq.x      = ival;
+		if (JsonGetInt(json, "y",      &ival)) g_wbHeightBlitReq.y      = ival;
+		if (JsonGetInt(json, "w",      &ival)) g_wbHeightBlitReq.w      = ival;
+		if (JsonGetInt(json, "h",      &ival)) g_wbHeightBlitReq.h      = ival;
+		if (JsonGetInt(json, "first",  &ival)) g_wbHeightBlitReq.first  = ival;
+		if (JsonGetInt(json, "commit", &ival)) g_wbHeightBlitReq.commit = ival;
+
+		int expect = g_wbHeightBlitReq.w * g_wbHeightBlitReq.h;
+		if (expect <= 0 || expect > 1024 * 1024) {
+			_snprintf(responseBuf, responseBufLen, "{\"ok\":false,\"error\":\"bad dimensions\"}");
+			return true;
+		}
+		const char* p = strstr(json, "\"data\"");
+		if (p) { p += 6; while (*p == ' ' || *p == ':') p++; if (*p == '"') p++; else p = nullptr; }
+		if (!p) {
+			_snprintf(responseBuf, responseBufLen, "{\"ok\":false,\"error\":\"missing data\"}");
+			return true;
+		}
+		unsigned char* buf = new unsigned char[expect];
+		int decoded = Base64Decode(p, buf, expect);
+		if (decoded != expect) {
+			delete[] buf;
+			_snprintf(responseBuf, responseBufLen,
+			          "{\"ok\":false,\"error\":\"data length %d != w*h %d\"}", decoded, expect);
+			return true;
+		}
+		g_wbHeightBlitReq.data = buf;
+		int written = (int)SendMessage(hwnd, WM_WB_HEIGHT_BLIT, 0, 0);
+		g_wbHeightBlitReq.data = nullptr;
+		delete[] buf;
+		_snprintf(responseBuf, responseBufLen, "{\"ok\":true,\"cells\":%d}", written);
 		return true;
 	}
 
