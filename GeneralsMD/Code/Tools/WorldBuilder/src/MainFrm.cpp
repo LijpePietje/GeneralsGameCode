@@ -1968,6 +1968,54 @@ LRESULT CMainFrame::OnWbTextureBlit(WPARAM, LPARAM)
 	}
 
 	if (r.commit) {
+		// TheSuperHackers @feature Nemellud 17/07/2026 EmbeddedMode: optional auto-blend pass.
+		// autoBlendOut floods the whole connected region of the seed's class and blends its
+		// edges outward, so one seed per region suffices. The most common class acts as the
+		// background: features blend out over it, the background itself never blends (same
+		// convention as manual painting, where strokes blend out over the underlying terrain).
+		if (r.blend) {
+			int size = mapW * mapH;
+			int counts[256];
+			memset(counts, 0, sizeof(counts));
+			int x, y;
+			for (y = 0; y < mapH; y++)
+				for (x = 0; x < mapW; x++) {
+					Int c = s_wbTexBlitCopy->getTextureClass(x, y, true);
+					if (c >= 0 && c < 256) counts[c]++;
+				}
+			int baseClass = 0;
+			for (x = 1; x < 256; x++)
+				if (counts[x] > counts[baseClass]) baseClass = x;
+			unsigned char* seen = new unsigned char[size];
+			memset(seen, 0, size);
+			int* stk = new int[size];
+			for (int start = 0; start < size; start++) {
+				if (seen[start]) continue;
+				seen[start] = 1;
+				Int cls = s_wbTexBlitCopy->getTextureClass(start % mapW, start / mapW, true);
+				if (cls < 0 || cls == baseClass) continue;
+				int top = 0;
+				stk[top++] = start;
+				while (top > 0) {
+					int cur = stk[--top];
+					int cx = cur % mapW, cy = cur / mapW;
+					static const int DX[4] = {1, -1, 0, 0};
+					static const int DY[4] = {0, 0, 1, -1};
+					for (int k = 0; k < 4; k++) {
+						int nx = cx + DX[k], ny = cy + DY[k];
+						if (nx < 0 || nx >= mapW || ny < 0 || ny >= mapH) continue;
+						int nndx = ny * mapW + nx;
+						if (seen[nndx]) continue;
+						if (s_wbTexBlitCopy->getTextureClass(nx, ny, true) != cls) continue;
+						seen[nndx] = 1;
+						stk[top++] = nndx;
+					}
+				}
+				s_wbTexBlitCopy->autoBlendOut(start % mapW, start / mapW);
+			}
+			delete[] stk;
+			delete[] seen;
+		}
 		s_wbTexBlitCopy->optimizeTiles();
 		IRegion2D range = {0, 0, 0, 0};
 		pDoc->updateHeightMap(s_wbTexBlitCopy, false, range);

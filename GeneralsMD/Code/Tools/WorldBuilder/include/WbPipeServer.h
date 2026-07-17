@@ -199,6 +199,9 @@ struct WbTextureBlitReq {
 	int x, y, w, h;
 	int first;
 	int commit;
+	// TheSuperHackers @feature Nemellud 17/07/2026 EmbeddedMode: blend=1 on the commit
+	// chunk runs an autoBlendOut pass over every non-background texture region.
+	int blend;
 	const unsigned char* data;
 };
 extern WbTextureBlitReq g_wbTextureBlitReq;

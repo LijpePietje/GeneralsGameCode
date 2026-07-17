@@ -44,7 +44,7 @@ WbFloodfillAtReq g_wbFloodfillAtReq = {0,0,-1,0};
 // TheSuperHackers @feature Nemellud 17/07/2026 EmbeddedMode: height blit shared request
 WbHeightBlitReq g_wbHeightBlitReq = {0,0,0,0,1,1,nullptr};
 // TheSuperHackers @feature Nemellud 17/07/2026 EmbeddedMode: texture blit shared request
-WbTextureBlitReq g_wbTextureBlitReq = {0,0,0,0,1,1,nullptr};
+WbTextureBlitReq g_wbTextureBlitReq = {0,0,0,0,1,1,0,nullptr};
 extern int   g_wbScreenQuerySx;
 extern int   g_wbScreenQuerySy;
 
@@ -942,13 +942,14 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 	// TheSuperHackers @feature Nemellud 17/07/2026 EmbeddedMode: blit texture-class field row band via pipe
 	if (strcmp(cmd, "map_texture_blit") == 0) {
 		int ival;
-		g_wbTextureBlitReq = {0,0,0,0,0,1,nullptr};
+		g_wbTextureBlitReq = {0,0,0,0,0,1,0,nullptr};
 		if (JsonGetInt(json, "x",      &ival)) g_wbTextureBlitReq.x      = ival;
 		if (JsonGetInt(json, "y",      &ival)) g_wbTextureBlitReq.y      = ival;
 		if (JsonGetInt(json, "w",      &ival)) g_wbTextureBlitReq.w      = ival;
 		if (JsonGetInt(json, "h",      &ival)) g_wbTextureBlitReq.h      = ival;
 		if (JsonGetInt(json, "first",  &ival)) g_wbTextureBlitReq.first  = ival;
 		if (JsonGetInt(json, "commit", &ival)) g_wbTextureBlitReq.commit = ival;
+		if (JsonGetInt(json, "blend",  &ival)) g_wbTextureBlitReq.blend  = ival;
 
 		int expect = g_wbTextureBlitReq.w * g_wbTextureBlitReq.h;
 		if (expect <= 0 || expect > 1024 * 1024) {
