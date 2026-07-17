@@ -2817,9 +2817,13 @@ LRESULT CMainFrame::OnWbAddTrigger(WPARAM, LPARAM lParam)
 	if (pDoc) {
 		char name[128] = "";
 		Bool isWater = FALSE, isRiver = FALSE;
+		// TheSuperHackers @feature Nemellud 17/07/2026 EmbeddedMode: z = water surface height
+		// (world units) applied to all points; terrain below this z is submerged.
+		int zHeight = 0;
 		MF_JsonGetStr (json, "name",    name,    sizeof(name));
 		MF_JsonGetBool(json, "isWater", &isWater);
 		MF_JsonGetBool(json, "isRiver", &isRiver);
+		MF_JsonGetInt (json, "z",       &zHeight);
 
 		if (name[0]) {
 			PolygonTrigger* pNew = newInstance(PolygonTrigger)(8);
@@ -2837,7 +2841,7 @@ LRESULT CMainFrame::OnWbAddTrigger(WPARAM, LPARAM lParam)
 					if (!endObj) break;
 					const char* px = strstr(pArr, "\"x\"");
 					const char* py = strstr(pArr, "\"y\"");
-					ICoord3D pt = {0, 0, 0};
+					ICoord3D pt = {0, 0, zHeight};
 					if (px && px < endObj) { px = strchr(px, ':'); if (px) pt.x = atoi(px + 1); }
 					if (py && py < endObj) { py = strchr(py, ':'); if (py) pt.y = atoi(py + 1); }
 					pNew->addPoint(pt);
