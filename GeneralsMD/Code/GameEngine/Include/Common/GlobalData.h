@@ -121,6 +121,12 @@ public:
 	// Run game without graphics, input or audio.
 	Bool m_headless;
 
+	// TheSuperHackers @feature Nemellud 17/07/2026 EmbeddedMode: -aiMatch <map> -aiPlayers <N>
+	// starts a fully-AI GAME_SKIRMISH with no human slot, no shell UI, no network required.
+	// m_aiMatchPlayers == 0 means the feature is off (default, zero behavior change).
+	AsciiString m_aiMatchMap;
+	Int m_aiMatchPlayers;
+
 	Bool m_windowed;
 	Int m_xResolution;
 	Int m_yResolution;
@@ -575,6 +581,15 @@ public:
 
 	// the trailing '\' is included!
   const AsciiString &getPath_UserData() const { return m_userDataDir; }
+
+	// TheSuperHackers @feature Nemellud 17/07/2026 EmbeddedMode: redirect Options/saves/replays/
+	// user-maps to a fully explicit, caller-given absolute folder so an automated run never
+	// touches the real player's profile, save games or replay history. Deliberately takes an
+	// absolute path rather than a suffix appended to the auto-detected Documents folder: on a
+	// system with broken/ambiguous OneDrive folder redirection, SHGetKnownFolderPath can resolve
+	// to a different physical location per process launch, which would silently defeat isolation.
+	// Must be called during paramsForStartup parsing, before anything else reads getPath_UserData().
+	void setUserDataDirOverride(const AsciiString &absolutePath);
 
 private:
 

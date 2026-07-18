@@ -96,6 +96,7 @@
 #include "GameClient/TerrainRoads.h"
 #include "GameClient/MetaEvent.h"
 #include "GameClient/MapUtil.h"
+#include "GameNetwork/GameInfo.h"
 #include "GameClient/GameWindowManager.h"
 #include "GameClient/GlobalLanguage.h"
 #include "GameClient/Drawable.h"
@@ -337,6 +338,112 @@ Bool GameEngine::isGameHalted()
 	}
 
 	return false;
+}
+
+// TheSuperHackers @feature Nemellud 17/07/2026 EmbeddedMode: build a fully-AI SkirmishGameInfo
+// and kick off GAME_SKIRMISH with no human slot and no shell UI, driven by -aiMatch/-aiPlayers.
+// Always combine with -aiSimProfile (isolated user-data dir) so this never touches the real
+// player's Options/saves/replays/user maps. Returns FALSE (and leaves the shell running normally)
+// if anything about the request looks wrong, rather than guessing.
+static Bool TryStartAiSkirmishMatch()
+{
+	if (TheGlobalData->m_aiMatchPlayers <= 0 || TheGlobalData->m_aiMatchMap.isEmpty())
+		return FALSE;
+
+	// Copying into the (isolated) user Maps folder reuses the exact same discovery path as any
+	// normal user map, instead of inventing a new absolute-path map-loading route. The engine's
+	// own MapCache enforces "Maps\<name>\<name>.map" (addMap() DEBUG_CRASHes otherwise), so mirror
+	// that shape exactly rather than reusing the source file's own directory name.
+	AsciiString srcPath = TheGlobalData->m_aiMatchMap;
+	const char* slash = srcPath.reverseFind('\\');
+	if (!slash) slash = srcPath.reverseFind('/');
+	AsciiString baseName = slash ? AsciiString(slash + 1) : srcPath;
+	if (baseName.endsWithNoCase(".map"))
+		baseName.truncateBy(4);
+	if (baseName.isEmpty())
+		return FALSE;
+
+	AsciiString destDir = TheGlobalData->getPath_UserData();
+	destDir.concat("Maps\\");
+	CreateDirectoryA(destDir.str(), nullptr);
+	destDir.concat(baseName);
+	destDir.concat('\\');
+	CreateDirectoryA(destDir.str(), nullptr);
+	AsciiString destPath = destDir;
+	destPath.concat(baseName);
+	destPath.concat(".map");
+
+	if (!CopyFileA(srcPath.str(), destPath.str(), FALSE))
+		return FALSE;
+
+	if (!TheMapCache)
+		return FALSE;
+	TheMapCache->updateCache();
+
+	AsciiString lowerMap = destPath;
+	lowerMap.toLower();
+	MapCache::iterator it = TheMapCache->find(lowerMap);
+	if (it == TheMapCache->end())
+		return FALSE;
+	const MapMetaData &mmd = it->second;
+
+	if (TheSkirmishGameInfo == nullptr)
+		TheSkirmishGameInfo = NEW SkirmishGameInfo;
+	TheSkirmishGameInfo->reset();
+	TheSkirmishGameInfo->setMap(destPath);
+	TheSkirmishGameInfo->setMapCRC(mmd.m_CRC);
+	TheSkirmishGameInfo->setMapSize(mmd.m_filesize);
+	TheSkirmishGameInfo->setMapContentsMask(1);
+	TheSkirmishGameInfo->setSeed(GetTickCount());
+	TheSkirmishGameInfo->setSuperweaponRestriction(0);
+	TheSkirmishGameInfo->setStartingCash(TheGlobalData->m_defaultStartingCash);
+
+	// TheSuperHackers @fix Nemellud 18/07/2026 EmbeddedMode: PLAYERTEMPLATE_RANDOM (-1) is NOT
+	// resolved to a real faction by GameLogic::tryStartNewGame() - it takes that as a request for
+	// the FactionObserver template instead (see GameLogic.cpp ~1406: "if (playerTemplate >= 0)
+	// getNthPlayerTemplate(...) else findPlayerTemplate(FactionObserver)"). The shell UI always
+	// resolves "Random" to a concrete faction the moment a slot becomes AI, before startGame() is
+	// ever reachable; going through TheSkirmishGameInfo directly skips that step entirely, so every
+	// AI slot silently became an observer with no units/base - the likely cause of the crash during
+	// game-start. Fix: pick real playable-side template indices ourselves.
+	int playableTemplates[16];
+	int numPlayable = 0;
+	for (Int i = 0; i < ThePlayerTemplateStore->getPlayerTemplateCount() && numPlayable < 16; ++i)
+	{
+		const PlayerTemplate *pt = ThePlayerTemplateStore->getNthPlayerTemplate(i);
+		if (pt && pt->isPlayableSide())
+			playableTemplates[numPlayable++] = i;
+	}
+
+	Int numSlots = TheGlobalData->m_aiMatchPlayers;
+	for (Int i = 0; i < MAX_SLOTS; ++i)
+	{
+		GameSlot *slot = TheSkirmishGameInfo->getSlot(i);
+		if (!slot) continue;
+		if (i < numSlots)
+		{
+			slot->setState(SLOT_MED_AI);
+			slot->setColor(i);             // distinct concrete color per slot, not -1
+			slot->setPlayerTemplate(numPlayable > 0 ? playableTemplates[i % numPlayable] : -1);
+			slot->setStartPos(i);           // distinct concrete start position per slot, not -1
+			slot->setTeamNumber(-1);        // free-for-all; every slot its own side
+		}
+		else
+		{
+			slot->setState(SLOT_CLOSED);
+		}
+	}
+
+	TheSkirmishGameInfo->startGame(0);
+	InitRandom(TheSkirmishGameInfo->getSeed());
+
+	GameMessage *msg = TheMessageStream->appendMessage(GameMessage::MSG_NEW_GAME);
+	msg->appendIntegerArgument(GAME_SKIRMISH);
+	msg->appendIntegerArgument(DIFFICULTY_NORMAL);
+	msg->appendIntegerArgument(0);
+	msg->appendIntegerArgument(0); // FPS limit arg; -noFPSLimit governs actual pacing
+
+	return TRUE;
 }
 
 /** -----------------------------------------------------------------------------------------------
@@ -704,8 +811,15 @@ void GameEngine::init()
 		// load the initial shell screen
 		//TheShell->push( "Menus/MainMenu.wnd" );
 
+		// TheSuperHackers @feature Nemellud 17/07/2026 EmbeddedMode: -aiMatch/-aiPlayers start a
+		// fully-AI skirmish with no human slot, bypassing the shell menu and the single-player
+		// -map path below entirely.
+		Bool aiMatchStarted = TryStartAiSkirmishMatch();
+		if (aiMatchStarted)
+			TheWritableGlobalData->m_shellMapOn = FALSE;
+
 		// This allows us to run a map from the command line
-		if (TheGlobalData->m_initialFile.isEmpty() == FALSE)
+		if (!aiMatchStarted && TheGlobalData->m_initialFile.isEmpty() == FALSE)
 		{
 			AsciiString fname = TheGlobalData->m_initialFile;
 			fname.toLower();

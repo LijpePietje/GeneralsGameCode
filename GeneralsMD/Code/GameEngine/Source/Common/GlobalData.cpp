@@ -636,6 +636,8 @@ GlobalData::GlobalData()
 	m_framesPerSecondLimit = 0;
 	m_chipSetType = 0;
 	m_headless = FALSE;
+	m_aiMatchMap.clear();
+	m_aiMatchPlayers = 0;
 	m_windowed = 0;
 	m_xResolution = DEFAULT_DISPLAY_WIDTH;
 	m_yResolution = DEFAULT_DISPLAY_HEIGHT;
@@ -1382,4 +1384,24 @@ AsciiString GlobalData::BuildUserDataPathFromRegistry()
 	}
 
 	return myDocumentsDirectory;
+}
+
+// TheSuperHackers @feature Nemellud 17/07/2026 EmbeddedMode: replace the auto-detected Documents-
+// based user data dir with a fully explicit absolute path. Called only from the -aiSimProfile
+// startup flag handler, right after GlobalData's constructor already computed+created the default
+// path via SHGetKnownFolderPath; that earlier CreateDirectory is harmless (it's the player's real
+// folder, which normally exists already — we just never write anything else into it afterward).
+// Everything downstream reads getPath_UserData(), so this single override is sufficient.
+void GlobalData::setUserDataDirOverride(const AsciiString &absolutePath)
+{
+	if (absolutePath.isEmpty())
+		return;
+
+	AsciiString path = absolutePath;
+	if (!path.endsWith("\\"))
+		path.concat('\\');
+
+	m_userDataDir = path;
+	CreateDirectory(m_userDataDir.str(), nullptr);
+	DEBUG_LOG(("GlobalData::setUserDataDirOverride - user data dir isolated to '%s'", m_userDataDir.str()));
 }

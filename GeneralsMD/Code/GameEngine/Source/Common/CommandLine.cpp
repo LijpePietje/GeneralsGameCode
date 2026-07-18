@@ -408,6 +408,37 @@ Int parseMapName(char *args[], int num)
 	return 1;
 }
 
+// TheSuperHackers @feature Nemellud 17/07/2026 EmbeddedMode: full/absolute .map path for -aiMatch.
+// Deliberately skips ConvertShortMapPathToLongMapPath (that helper mangles absolute paths — it
+// expects a Maps-relative shorthand). GameEngine::init() copies this file into the isolated
+// user-data Maps folder and derives the canonical relative name from there.
+Int parseAiMatchMap(char *args[], int num)
+{
+	// TheSuperHackers @fix Nemellud 17/07/2026: num is argc-arg (all REMAINING tokens on the
+	// command line), not this flag's own arg count — "num == 2" only worked if the flag happened
+	// to be last. Match the -xres/-dumpObjectState convention instead: "num > 1" + "return 2"
+	// (2 tokens consumed: the flag and its value) so later flags on the same line still parse.
+	if (num > 1)
+	{
+		TheWritableGlobalData->m_aiMatchMap.set( args[ 1 ] );
+		return 2;
+	}
+	return 1;
+}
+
+Int parseAiMatchPlayers(char *args[], int num)
+{
+	if (num > 1)
+	{
+		Int n = atoi(args[1]);
+		if (n < 2) n = 2;
+		if (n > 8) n = 8; // matches MAX_SLOTS (NetworkDefs.h: MAX_PLAYER+1); avoids pulling that header in here
+		TheWritableGlobalData->m_aiMatchPlayers = n;
+		return 2;
+	}
+	return 1;
+}
+
 Int parseHeadless(char *args[], int num)
 {
 	TheWritableGlobalData->m_headless = TRUE;
@@ -421,6 +452,23 @@ Int parseHeadless(char *args[], int num)
 	extern bool DX8Wrapper_IsWindowed;
 	DX8Wrapper_IsWindowed = false;
 
+	return 1;
+}
+
+// TheSuperHackers @feature Nemellud 17/07/2026 EmbeddedMode: redirect Options/saves/replays/user
+// maps to a fully explicit absolute folder (never the real player's) — required before any
+// automated AI-vs-AI run (-aiMatch). Takes an absolute path, not a suffix: on a system with
+// ambiguous/broken OneDrive Documents redirection, SHGetKnownFolderPath can resolve to a
+// different physical folder per launch, which would silently defeat a suffix-based approach.
+// Must run in paramsForStartup: GlobalData's constructor computes the default path before
+// command-line parsing even begins, so this simply overrides it right after.
+Int parseAiSimProfile(char *args[], int num)
+{
+	if (num > 1)
+	{
+		TheWritableGlobalData->setUserDataDirOverride(AsciiString(args[1]));
+		return 2;
+	}
 	return 1;
 }
 
@@ -1157,6 +1205,12 @@ static CommandLineParam paramsForStartup[] =
 	// This runs the game without a window, graphics, input and audio. You can combine this with -replay
 	{ "-headless", parseHeadless },
 
+	// TheSuperHackers @feature Nemellud 17/07/2026
+	// Isolate Options/opt profile/SaveGames/Replays/User Maps into a fully explicit folder instead
+	// of the real player's. Pass an absolute path, e.g. "-aiSimProfile C:\temp\ai_sim_userdata".
+	// Always use this together with -aiMatch so an automated run never touches real player files.
+	{ "-aiSimProfile", parseAiSimProfile },
+
 	// TheSuperHackers @feature helmutbuhler 13/04/2025
 	// Play back a replay. Pass the filename including .rep afterwards.
 	// You can pass this multiple times to play back multiple replays.
@@ -1194,6 +1248,15 @@ static CommandLineParam paramsForEngineInit[] =
 
 	// TheSuperHackers @feature xezon 03/08/2025 Force full viewport for 'Control Bar Pro' Addons like GenTool did it.
 	{ "-forcefullviewport", parseFullViewport },
+
+	// TheSuperHackers @feature Nemellud 17/07/2026
+	// Start a fully-AI skirmish match with no human slot and no shell UI: pass the .map's full/
+	// absolute path with -aiMatch and the player count (2-8) with -aiPlayers. Always combine with
+	// -aiSimProfile so the run never touches the real player's Options/saves/replays/user maps,
+	// and -headless -noFPSLimit so it runs in the background without real-time pacing. Deliberately
+	// NOT gated behind RTS_DEBUG (unlike -map right below) since this must work in Release builds.
+	{ "-aiMatch", parseAiMatchMap },
+	{ "-aiPlayers", parseAiMatchPlayers },
 
 #if defined(RTS_DEBUG)
 	{ "-noaudio", parseNoAudio },

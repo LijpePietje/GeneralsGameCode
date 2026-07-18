@@ -1263,9 +1263,15 @@ void MultiPlayerLoadScreen::init( GameInfo *game )
 	m_loadScreen->winHide(FALSE);
 	m_loadScreen->winBringToTop();
 	m_mapPreview = TheWindowManager->winGetWindowFromId( m_loadScreen,TheNameKeyGenerator->nameToKey( "MultiplayerLoadScreen.wnd:WinMapPreview"));
+	// TheSuperHackers @fix Nemellud 18/07/2026 EmbeddedMode: getLocalSlotNum() returns -1 when no
+	// slot's IP matches the local machine - true for every slot in a fully-AI match with no human
+	// present (getSlot(-1) correctly returns nullptr, but this line dereferenced it unconditionally).
+	// Every prior caller of GAME_SKIRMISH assumed a human always starts the match, so this path was
+	// never exercised before. Fall back to the same "no real local player" template already used
+	// below for an unresolved playerTemplate, instead of crashing.
 	GameSlot *lSlot = game->getSlot(game->getLocalSlotNum());
 	const PlayerTemplate* pt;
-	if (lSlot->getPlayerTemplate() >= 0)
+	if (lSlot && lSlot->getPlayerTemplate() >= 0)
 		pt = ThePlayerTemplateStore->getNthPlayerTemplate(lSlot->getPlayerTemplate());
 	else
 		pt = ThePlayerTemplateStore->findPlayerTemplate( TheNameKeyGenerator->nameToKey("FactionObserver") );
