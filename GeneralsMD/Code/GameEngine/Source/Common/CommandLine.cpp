@@ -546,6 +546,19 @@ Int parseYRes(char *args[], int num)
 	return 1;
 }
 
+//=============================================================================
+// TheSuperHackers @fix Nemellud 28/07/2026 Moved out of the RTS_DEBUG block below so that
+// -fps works in Release builds too - an automated -aiMatch run has to be able to set its own
+// pacing, and those runs use Release builds.
+Int parseFPSLimit(char *args[], int num)
+{
+	if (num > 1)
+	{
+		TheWritableGlobalData->m_framesPerSecondLimit = atoi(args[1]);
+	}
+	return 2;
+}
+
 #if defined(RTS_DEBUG)
 //=============================================================================
 //=============================================================================
@@ -627,17 +640,6 @@ Int parseNoStaticLOD(char *args[], int num)
 	TheWritableGlobalData->m_enableStaticLOD = FALSE;
 
 	return 1;
-}
-
-//=============================================================================
-//=============================================================================
-Int parseFPSLimit(char *args[], int num)
-{
-	if (num > 1)
-	{
-		TheWritableGlobalData->m_framesPerSecondLimit = atoi(args[1]);
-	}
-	return 2;
 }
 
 //=============================================================================
@@ -1258,6 +1260,13 @@ static CommandLineParam paramsForEngineInit[] =
 	{ "-aiMatch", parseAiMatchMap },
 	{ "-aiPlayers", parseAiMatchPlayers },
 
+	// TheSuperHackers @fix Nemellud 28/07/2026 Both of these sat inside the RTS_DEBUG block below
+	// and were therefore compiled out of every Release build - passing them did nothing at all,
+	// silently. Moved out for the same reason -aiMatch was: an automated match run needs to control
+	// its own pacing, and those runs happen against Release builds.
+	{ "-fps", parseFPSLimit },
+	{ "-noFPSLimit", parseNoFPSLimit },
+
 #if defined(RTS_DEBUG)
 	{ "-noaudio", parseNoAudio },
 	{ "-map", parseMapName },
@@ -1339,7 +1348,6 @@ static CommandLineParam paramsForEngineInit[] =
 	{ "-lowDetail", parseLowDetail },
 	{ "-noDynamicLOD", parseNoDynamicLOD },
 	{ "-noStaticLOD", parseNoStaticLOD },
-	{ "-fps", parseFPSLimit },
 	{ "-wireframe", parseWireframe },
 	{ "-showCollision", parseShowCollision },
 	{ "-noShowClientPhysics", parseNoShowClientPhysics },
@@ -1374,7 +1382,6 @@ static CommandLineParam paramsForEngineInit[] =
 	{ "-constantDebug", parseConstantDebug },
 	{ "-seed", parseSeed },
 	{ "-noagpfix", parseIncrAGPBuf },
-	{ "-noFPSLimit", parseNoFPSLimit },
 	{ "-dumpAssetUsage", parseDumpAssetUsage },
 	{ "-jumpToFrame", parseJumpToFrame },
 	{ "-updateImages", parseUpdateImages },

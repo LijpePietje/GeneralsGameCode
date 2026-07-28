@@ -415,6 +415,11 @@ static Bool TryStartAiSkirmishMatch()
 			playableTemplates[numPlayable++] = i;
 	}
 
+	// TheSuperHackers @info Nemellud 28/07/2026 Seating a human Observer in slot 0 (to give the
+	// client a valid getLocalSlotNum() so the match can be watched live in a window) was tried
+	// and does NOT work: the match then never starts at all - the replay stays at header size on
+	// both a 1v1 and a 4-player map. Skirmish appears not to support an observer slot. Watching
+	// is done by playing the recorded replay back instead (-replay), which works.
 	Int numSlots = TheGlobalData->m_aiMatchPlayers;
 	for (Int i = 0; i < MAX_SLOTS; ++i)
 	{
