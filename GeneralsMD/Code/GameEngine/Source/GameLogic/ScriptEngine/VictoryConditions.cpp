@@ -105,6 +105,8 @@ private:
 	Bool					m_localPlayerDefeated;												///< prevents condition from being signaled each frame
 	Bool					m_singleAllianceRemaining;										///< prevents condition from being signaled each frame
 	Bool					m_isObserver;
+	Bool					m_hasOwnedSomething[MAX_PLAYER_COUNT];				///< player has been populated at least once
+	Bool					m_allPlayersPopulated;												///< only then can a winner be decided
 };
 
 //-------------------------------------------------------------------------------------------------
@@ -134,12 +136,14 @@ void VictoryConditions::reset()
 		m_players[i] = nullptr;
 		m_isDefeated[i] = false;
 		m_isVictorious[i] = false;
+		m_hasOwnedSomething[i] = false;
 	}
 	m_localSlotNum = -1;
 
 	m_localPlayerDefeated = false;
 	m_singleAllianceRemaining = false;
 	m_isObserver = false;
+	m_allPlayersPopulated = false;
 	m_endFrame = 0;
 
 	m_victoryConditions = VICTORY_NOBUILDINGS | VICTORY_NOUNITS;
@@ -179,6 +183,31 @@ void VictoryConditions::update()
 {
 	if (!TheRecorder->isMultiplayer() || (m_localSlotNum < 0 && !m_isObserver))
 		return;
+
+	// TheSuperHackers @bugfix Nemellud 28/07/2026 Do not judge the game before every player has
+	// been populated. Every defeat test here is "owns nothing", which is trivially true for a
+	// player whose starting units have not been placed yet - so the first evaluation found no
+	// undefeated player at all, concluded a single alliance remained, and ended the match at
+	// frame 0. Verified against an -aiMatch run: at frames 0-7 both players reported
+	// anyObjects=0 while the game was already flagged over. Waiting until each player has owned
+	// something at least once (rather than just any player, which still loses to a staggered
+	// spawn) cannot mask a real win: a winner has to own something by definition.
+	if (!m_allPlayersPopulated)
+	{
+		Bool allSeen = TRUE;
+		for (Int i = 0; i < MAX_PLAYER_COUNT; ++i)
+		{
+			if (!m_players[i])
+				continue;
+			if (!m_hasOwnedSomething[i] && m_players[i]->hasAnyObjects())
+				m_hasOwnedSomething[i] = TRUE;
+			if (!m_hasOwnedSomething[i])
+				allSeen = FALSE;
+		}
+		if (!allSeen)
+			return;
+		m_allPlayersPopulated = TRUE;
+	}
 
 	// Check for a single winning alliance
 	if (!m_singleAllianceRemaining)
