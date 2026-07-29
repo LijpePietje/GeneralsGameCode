@@ -439,6 +439,23 @@ Int parseAiMatchPlayers(char *args[], int num)
 	return 1;
 }
 
+// TheSuperHackers @feature Nemellud 28/07/2026 EmbeddedMode: AI skill for an -aiMatch run.
+// Accepts easy|medium|hard (or 0|1|2). Both the slot state and the game difficulty follow it,
+// the same pair the skirmish shell sets when you pick a difficulty there.
+Int parseAiMatchDifficulty(char *args[], int num)
+{
+	if (num > 1)
+	{
+		AsciiString v = args[1];
+		v.toLower();
+		if (v == "easy" || v == "0")        TheWritableGlobalData->m_aiMatchDifficulty = 0;
+		else if (v == "hard" || v == "2")   TheWritableGlobalData->m_aiMatchDifficulty = 2;
+		else                                TheWritableGlobalData->m_aiMatchDifficulty = 1;
+		return 2;
+	}
+	return 1;
+}
+
 Int parseHeadless(char *args[], int num)
 {
 	TheWritableGlobalData->m_headless = TRUE;
@@ -1259,6 +1276,7 @@ static CommandLineParam paramsForEngineInit[] =
 	// NOT gated behind RTS_DEBUG (unlike -map right below) since this must work in Release builds.
 	{ "-aiMatch", parseAiMatchMap },
 	{ "-aiPlayers", parseAiMatchPlayers },
+	{ "-aiDifficulty", parseAiMatchDifficulty },
 
 	// TheSuperHackers @fix Nemellud 28/07/2026 Both of these sat inside the RTS_DEBUG block below
 	// and were therefore compiled out of every Release build - passing them did nothing at all,

@@ -387,6 +387,12 @@ static Bool TryStartAiSkirmishMatch()
 		return FALSE;
 	const MapMetaData &mmd = it->second;
 
+	// TheSuperHackers @info Nemellud 28/07/2026 Watching an -aiMatch live with -win runs
+	// correctly (logic, recording and pacing are all fine) but renders nothing: the screen and
+	// radar stay black. Not the shroud - clearing m_shroudOn here changed nothing - and not the
+	// camera, which scrolls without ever revealing terrain. The client evidently does not draw
+	// the world without a local player. Watch the recorded replay instead, which renders and
+	// reports correctly because playback does have one.
 	if (TheSkirmishGameInfo == nullptr)
 		TheSkirmishGameInfo = NEW SkirmishGameInfo;
 	TheSkirmishGameInfo->reset();
@@ -420,6 +426,18 @@ static Bool TryStartAiSkirmishMatch()
 	// and does NOT work: the match then never starts at all - the replay stays at header size on
 	// both a 1v1 and a 4-player map. Skirmish appears not to support an observer slot. Watching
 	// is done by playing the recorded replay back instead (-replay), which works.
+	// Slot skill and game difficulty move together, matching what the skirmish shell does when
+	// you pick a difficulty there. "Hard" is SLOT_BRUTAL_AI - the UI's three levels map to
+	// EASY/MED/BRUTAL, there is no fourth.
+	SlotState aiSlotState;
+	GameDifficulty aiDifficulty;
+	switch (TheGlobalData->m_aiMatchDifficulty)
+	{
+		case 0:  aiSlotState = SLOT_EASY_AI;   aiDifficulty = DIFFICULTY_EASY;   break;
+		case 2:  aiSlotState = SLOT_BRUTAL_AI; aiDifficulty = DIFFICULTY_HARD;   break;
+		default: aiSlotState = SLOT_MED_AI;    aiDifficulty = DIFFICULTY_NORMAL; break;
+	}
+
 	Int numSlots = TheGlobalData->m_aiMatchPlayers;
 	for (Int i = 0; i < MAX_SLOTS; ++i)
 	{
@@ -427,7 +445,7 @@ static Bool TryStartAiSkirmishMatch()
 		if (!slot) continue;
 		if (i < numSlots)
 		{
-			slot->setState(SLOT_MED_AI);
+			slot->setState(aiSlotState);
 			slot->setColor(i);             // distinct concrete color per slot, not -1
 			slot->setPlayerTemplate(numPlayable > 0 ? playableTemplates[i % numPlayable] : -1);
 			slot->setStartPos(i);           // distinct concrete start position per slot, not -1
@@ -444,9 +462,9 @@ static Bool TryStartAiSkirmishMatch()
 
 	GameMessage *msg = TheMessageStream->appendMessage(GameMessage::MSG_NEW_GAME);
 	msg->appendIntegerArgument(GAME_SKIRMISH);
-	msg->appendIntegerArgument(DIFFICULTY_NORMAL);
+	msg->appendIntegerArgument(aiDifficulty);
 	msg->appendIntegerArgument(0);
-	msg->appendIntegerArgument(0); // FPS limit arg; -noFPSLimit governs actual pacing
+	msg->appendIntegerArgument(0); // FPS limit arg; -fps governs actual pacing
 
 	return TRUE;
 }

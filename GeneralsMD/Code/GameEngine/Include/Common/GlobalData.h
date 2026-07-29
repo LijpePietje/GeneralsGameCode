@@ -126,6 +126,9 @@ public:
 	// m_aiMatchPlayers == 0 means the feature is off (default, zero behavior change).
 	AsciiString m_aiMatchMap;
 	Int m_aiMatchPlayers;
+	// TheSuperHackers @feature Nemellud 28/07/2026 EmbeddedMode: -aiDifficulty picks the AI skill
+	// for an -aiMatch run. 0=easy, 1=medium (default), 2=hard.
+	Int m_aiMatchDifficulty;
 
 	Bool m_windowed;
 	Int m_xResolution;

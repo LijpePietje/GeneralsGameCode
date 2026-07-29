@@ -638,6 +638,7 @@ GlobalData::GlobalData()
 	m_headless = FALSE;
 	m_aiMatchMap.clear();
 	m_aiMatchPlayers = 0;
+	m_aiMatchDifficulty = 1; // medium
 	m_windowed = 0;
 	m_xResolution = DEFAULT_DISPLAY_WIDTH;
 	m_yResolution = DEFAULT_DISPLAY_HEIGHT;
