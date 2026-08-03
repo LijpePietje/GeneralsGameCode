@@ -164,6 +164,11 @@ public:
 	virtual BOOL CanCloseFrame(CFrameWnd* pFrame) override;
 	//}}AFX_VIRTUAL
 
+	// TheSuperHackers @feature Nemellud 01/08/2026 MapINI: apply the map.ini next to
+	// 'mapPathName' so the 3D view shows the map's own water look. Pass nullptr to
+	// clear a previous map's overrides without loading anything.
+	void applyMapIni(LPCTSTR mapPathName);
+
 // Implementation
 public:
 	virtual ~CWorldBuilderDoc() override;

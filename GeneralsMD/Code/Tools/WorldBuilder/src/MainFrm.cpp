@@ -123,6 +123,7 @@ BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
 	ON_MESSAGE(WM_WB_CONTOUR_GET,     OnWbContourGet)
 	// Tier H
 	ON_MESSAGE(WM_WB_GET_MAP_INFO,    OnWbGetMapInfo)
+	ON_MESSAGE(WM_WB_RELOAD_MAP_INI,  OnWbReloadMapIni)
 	ON_MESSAGE(WM_WB_GET_HEIGHTMAP,   OnWbGetHeightmap)
 	ON_MESSAGE(WM_WB_GET_TEXTUREMAP,  OnWbGetTexturemap)
 	ON_MESSAGE(WM_WB_GET_OBJECTS,     OnWbGetObjects)
@@ -1282,6 +1283,31 @@ LRESULT CMainFrame::OnWbContourGet(WPARAM wParam, LPARAM lParam)
 
 // ── Tier H — Map data read-back ───────────────────────────────────────────────
 
+// TheSuperHackers @feature Nemellud 01/08/2026 MapINI: reapply the open map's map.ini.
+// Lets the UI show a changed water look immediately instead of after reopening the map.
+LRESULT CMainFrame::OnWbReloadMapIni(WPARAM wParam, LPARAM lParam)
+{
+	char* buf = (char*)lParam;
+	int   len = (int)wParam;
+	if (!buf || len < 64) return 0;
+
+	CWorldBuilderDoc* pDoc = (CWorldBuilderDoc*)GetActiveDocument();
+	if (!pDoc) {
+		_snprintf(buf, len, "{\"ok\":false,\"error\":\"no map loaded\"}");
+		return 0;
+	}
+	CString pathName = pDoc->GetPathName();
+	if (pathName.IsEmpty()) {
+		_snprintf(buf, len, "{\"ok\":false,\"error\":\"map has not been saved, so it has no map.ini\"}");
+		return 0;
+	}
+
+	pDoc->applyMapIni((LPCTSTR)pathName);
+	pDoc->updateAllViews();
+	_snprintf(buf, len, "{\"ok\":true}");
+	return 0;
+}
+
 // TheSuperHackers @feature Nemellud 25/05/2026 EmbeddedMode: return basic map info for pipe
 LRESULT CMainFrame::OnWbGetMapInfo(WPARAM wParam, LPARAM lParam)
 {
@@ -1397,8 +1423,12 @@ LRESULT CMainFrame::OnWbGetObjects(WPARAM wParam, LPARAM lParam)
 		bool isBridgePt1 = !!(flags & FLAG_BRIDGE_POINT1);
 		bool isBridgePt2 = !!(flags & FLAG_BRIDGE_POINT2);
 		if (isBridgePt2) continue; // skip POINT2 — POINT1 already represents the bridge pair
+		// TheSuperHackers @feature Nemellud 01/08/2026 EmbeddedMode: report objectName for every
+		// object, not only bridges. "name" stays the template type so existing callers are
+		// unaffected; scripts reference an object by its objectName, so a caller that wants to
+		// wire one up (NAMED_DESTROYED and friends) had no way to find it before.
 		char objName[128] = "";
-		if (isBridgePt1 && d) {
+		if (d) {
 			Bool sne = FALSE;
 			AsciiString sn = d->getAsciiString(TheKey_objectName, &sne);
 			if (sne && sn.getLength() > 0) strncpy(objName, sn.str(), sizeof(objName) - 1);
@@ -1413,9 +1443,10 @@ LRESULT CMainFrame::OnWbGetObjects(WPARAM wParam, LPARAM lParam)
 			if (exists) strncpy(owner, ownerStr.str(), sizeof(owner) - 1);
 		}
 		pos += _snprintf(buf + pos, maxLen - pos,
-			"%s{\"name\":\"%s\",\"wx\":%.1f,\"wy\":%.1f,\"angle\":%.1f,\"team\":\"%s\",\"selected\":%s,\"flags\":%d}",
+			"%s{\"name\":\"%s\",\"objectName\":\"%s\",\"wx\":%.1f,\"wy\":%.1f,\"angle\":%.1f,\"team\":\"%s\",\"selected\":%s,\"flags\":%d}",
 			first ? "" : ",",
 			name,
+			objName,
 			loc ? loc->x : 0.0f, loc ? loc->y : 0.0f,
 			pObj->getAngle() * (180.0f / 3.14159265f),
 			owner,
@@ -1496,13 +1527,18 @@ LRESULT CMainFrame::OnWbGetTriggers(WPARAM wParam, LPARAM lParam)
 		if (pos >= maxLen - 512) break;
 		const char* name = pTrig->getTriggerName().str();
 		int nPts = pTrig->getNumPoints();
+		// TheSuperHackers @feature Nemellud 01/08/2026 EmbeddedMode: report the surface height.
+		// A water polygon is flat, so point 0's z is the water level. Without it a caller can
+		// create water at a given level but never read back what it is.
+		const ICoord3D* pt0 = (nPts > 0) ? pTrig->getPoint(0) : nullptr;
 		int tPos = pos;
 		tPos += _snprintf(buf + tPos, maxLen - tPos,
-			"%s{\"id\":%d,\"name\":\"%s\",\"isWater\":%s,\"isRiver\":%s,\"points\":[",
+			"%s{\"id\":%d,\"name\":\"%s\",\"isWater\":%s,\"isRiver\":%s,\"z\":%d,\"points\":[",
 			first ? "" : ",",
 			pTrig->getID(), name,
 			pTrig->isWaterArea() ? "true" : "false",
-			pTrig->isRiver()     ? "true" : "false");
+			pTrig->isRiver()     ? "true" : "false",
+			pt0 ? pt0->z : 0);
 		bool firstPt = true;
 		for (int i = 0; i < nPts && tPos < maxLen - 64; i++) {
 			const ICoord3D* pt = pTrig->getPoint(i);

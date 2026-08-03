@@ -188,6 +188,8 @@ protected:
 	afx_msg LRESULT OnWbContourGet(WPARAM wParam, LPARAM lParam);
 	// TheSuperHackers @feature Nemellud 25/05/2026 EmbeddedMode: Tier H — map data read-back via pipe
 	afx_msg LRESULT OnWbGetMapInfo(WPARAM wParam, LPARAM lParam);
+	// TheSuperHackers @feature Nemellud 01/08/2026 MapINI: reapply the open map's map.ini
+	afx_msg LRESULT OnWbReloadMapIni(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbGetHeightmap(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbGetTexturemap(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbGetObjects(WPARAM wParam, LPARAM lParam);

@@ -170,6 +170,8 @@ private:
 #define WM_WB_HEIGHT_BLIT    (WM_USER + 206)   // sync: write height band into pending copy; reads g_wbHeightBlitReq
 // TheSuperHackers @feature Nemellud 17/07/2026 EmbeddedMode: blit texture-class field via pipe (chunked row bands)
 #define WM_WB_TEXTURE_BLIT   (WM_USER + 207)   // sync: write texture band into pending copy; reads g_wbTextureBlitReq
+// TheSuperHackers @feature Nemellud 01/08/2026 MapINI: re-read the open map's map.ini
+#define WM_WB_RELOAD_MAP_INI (WM_USER + 208)   // sync: reapply map.ini next to the open map; wParam=bufLen, lParam=buf
 
 extern char g_wbSavePath[260];
 

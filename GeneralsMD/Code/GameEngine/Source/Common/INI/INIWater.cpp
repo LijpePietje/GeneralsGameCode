@@ -137,7 +137,12 @@ void INI::parseWaterTransparencyDefinition( INI *ini )
 		oldTextures[4]=&wtOriginal->m_skyboxTextureT;
 		newTextures[4]=&wtOverride->m_skyboxTextureT;
 
-		TheTerrainVisual->replaceSkyboxTextures(oldTextures, newTextures);
+		// TheSuperHackers @bugfix Nemellud 01/08/2026 INIWater: guard TheTerrainVisual.
+		// Tools that use the engine without GameClient::init() - WorldBuilder loading a
+		// map's map.ini for its 3D preview - have no TerrainVisual, and this call is the
+		// only thing in the water override path that needs one.
+		if (TheTerrainVisual != nullptr)
+			TheTerrainVisual->replaceSkyboxTextures(oldTextures, newTextures);
 	}
 }
 

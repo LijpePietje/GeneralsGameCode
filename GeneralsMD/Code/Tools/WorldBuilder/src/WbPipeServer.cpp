@@ -1164,6 +1164,13 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 		return true;
 	}
 
+	// TheSuperHackers @feature Nemellud 01/08/2026 MapINI: re-read map.ini after it changed
+	// on disk, so the 3D view picks up a new water look without reopening the map.
+	if (strcmp(cmd, "reload_map_ini") == 0) {
+		SendMessage(hwnd, WM_WB_RELOAD_MAP_INI, (WPARAM)responseBufLen, (LPARAM)responseBuf);
+		return true;
+	}
+
 	if (strcmp(cmd, "map_get_heightmap") == 0) {
 		SendMessage(hwnd, WM_WB_GET_HEIGHTMAP, (WPARAM)responseBufLen, (LPARAM)responseBuf);
 		return true;

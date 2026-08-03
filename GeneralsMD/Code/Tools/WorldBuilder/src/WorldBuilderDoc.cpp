@@ -28,6 +28,7 @@
 
 #include "Common/Debug.h"
 #include "Common/DataChunk.h"
+#include "Common/INI.h"
 #include "Common/PlayerTemplate.h"
 #include "Common/MapReaderWriterInfo.h"
 #include "Common/ThingTemplate.h"
@@ -37,6 +38,7 @@
 #include "GameClient/Line2D.h"
 #include "GameClient/View.h"
 #include "GameClient/GameText.h"
+#include "GameClient/Water.h"
 
 #include "GameLogic/PolygonTrigger.h"
 #include "GameLogic/SidesList.h"
@@ -54,6 +56,7 @@
 #include "ScriptDialog.h"
 #include "TerrainMaterial.h"
 #include "W3DDevice/GameClient/HeightMap.h"
+#include "W3DDevice/GameClient/W3DWater.h"
 #include "wbview3d.h"
 #include "wbview.h"
 #include "WHeightMapEdit.h"
@@ -1286,6 +1289,10 @@ BOOL CWorldBuilderDoc::OnNewDocument()
 	// clear out map-specific text
 	TheGameText->reset();
 
+	// A new map has no map.ini, so start from the stock look rather than inheriting
+	// whatever the previously opened map installed.
+	applyMapIni(nullptr);
+
 	TNewHeightInfo hi;
 	hi.initialHeight = AfxGetApp()->GetProfileInt("GameOptions", "Default Map Height", 16);
 	hi.xExtent = AfxGetApp()->GetProfileInt("GameOptions", "Default Map X-size", 100);
@@ -1443,6 +1450,120 @@ void CWorldBuilderDoc::updateHeightMap(WorldHeightMap *htMap, Bool partial, cons
 	}
 }
 
+// TheSuperHackers @feature Nemellud 01/08/2026 MapINI: show the map's water look in the editor.
+//
+// The colour, opacity and texture of water are not stored in the .map - the game reads them
+// from a map.ini next to it when it loads the map (GameLogic.cpp loadMapINI). WorldBuilder
+// never did that, so its 3D view always showed the stock look from Water.ini even though it
+// renders water with the very same WaterRenderObjClass the game uses, reading the very same
+// TheWaterTransparency (W3DWater.cpp drawTrapezoidWater / drawRiverWater).
+//
+// Only the blocks listed here are honoured. Object/ParticleSystem/Terrain overrides are
+// deliberately ignored: they would silently change the editor's object and texture palettes,
+// which are cached and surfaced over the REST API.
+static const char* const MAPINI_PREVIEW_BLOCKS[] = { "WaterTransparency" };
+
+// Drop the overrides a previously opened map installed, so they do not stack up map after map.
+// This mirrors what GameLogic::reset does between missions.
+static void resetMapIniOverrides(void)
+{
+	if (TheWaterTransparency != nullptr) {
+		WaterTransparencySetting* wt = (WaterTransparencySetting*) TheWaterTransparency.getNonOverloadedPointer();
+		TheWaterTransparency = (WaterTransparencySetting*) wt->deleteOverrides();
+	}
+}
+
+// True when 'line' is the INI block header for 'block' - the name alone on the line,
+// ignoring leading whitespace and a trailing comment.
+static Bool isIniBlockHeader(const char* line, const char* block)
+{
+	while (*line == ' ' || *line == '\t') line++;
+	const size_t len = strlen(block);
+	if (_strnicmp(line, block, len) != 0) return FALSE;
+	const char* rest = line + len;
+	while (*rest == ' ' || *rest == '\t' || *rest == '\r' || *rest == '\n') rest++;
+	return (*rest == 0 || *rest == ';');
+}
+
+static Bool isIniBlockEnd(const char* line)
+{
+	return isIniBlockHeader(line, "End");
+}
+
+/**
+ * Copy the whitelisted blocks out of a map.ini into a temp INI and load that, instead of
+ * loading the map.ini wholesale. Keeps the blast radius to the blocks we understand while
+ * still using the engine's own parser, so there is no second INI dialect to keep in step.
+ */
+static void loadMapIniPreview(const char* mapIniPath)
+{
+	FILE* in = nullptr;
+	fopen_s(&in, mapIniPath, "r");
+	if (in == nullptr) return;			// no map.ini is the normal case, not an error
+
+
+	char tmpPath[MAX_PATH] = "";
+	const DWORD tmpLen = GetTempPathA(MAX_PATH, tmpPath);
+	if (tmpLen == 0 || tmpLen >= MAX_PATH - 32) { fclose(in); return; }
+	strncat_s(tmpPath, sizeof(tmpPath), "wb_map_preview.ini", _TRUNCATE);
+
+	FILE* out = nullptr;
+	fopen_s(&out, tmpPath, "w");
+	if (out == nullptr) { fclose(in); return; }
+
+	char line[1024];
+	Bool copying = FALSE, wroteAny = FALSE;
+	while (fgets(line, sizeof(line), in) != nullptr) {
+		if (!copying) {
+			for (int i = 0; i < ARRAY_SIZE(MAPINI_PREVIEW_BLOCKS); i++) {
+				if (isIniBlockHeader(line, MAPINI_PREVIEW_BLOCKS[i])) { copying = TRUE; break; }
+			}
+			if (!copying) continue;
+		}
+		fputs(line, out);
+		wroteAny = TRUE;
+		if (isIniBlockEnd(line)) copying = FALSE;
+	}
+	// An unterminated block would make the parser run off the end of the file.
+	if (copying) fputs("End\n", out);
+
+	fclose(in);
+	fclose(out);
+	if (!wroteAny) return;
+
+	// A map.ini is user-authored and can contain anything; an INI exception here would
+	// otherwise take the editor down on a bad map. Same guard as the wb_extra_objects load.
+	try {
+		INI mapIni;
+		mapIni.load(AsciiString(tmpPath), INI_LOAD_CREATE_OVERRIDES, nullptr);
+	} catch (...) {
+		DEBUG_LOG(("map.ini could not be parsed, keeping the default look: %s", mapIniPath));
+	}
+}
+
+// Apply the map.ini that sits next to 'mapPathName' (may be nullptr to only clear overrides).
+void CWorldBuilderDoc::applyMapIni(LPCTSTR mapPathName)
+{
+	resetMapIniOverrides();
+
+	if (mapPathName != nullptr) {
+		AsciiString iniPath = mapPathName;
+		const char* lastSep = iniPath.reverseFind('\\');
+		if (lastSep != nullptr) {
+			iniPath.truncateTo(lastSep - iniPath.str() + 1);
+			iniPath.concat("map.ini");
+			loadMapIniPreview(iniPath.str());
+		}
+	}
+
+	// Always, not just after a successful load: WaterRenderObjClass caches the water
+	// texture in m_riverTexture, so going back to no map.ini has to refresh it too or
+	// the previous map's texture stays on screen.
+	if (TheWaterRenderObj != nullptr) {
+		TheWaterRenderObj->updateMapOverrides();
+	}
+}
+
 BOOL CWorldBuilderDoc::OnOpenDocument(LPCTSTR lpszPathName)
 {
 #ifdef ONLY_ONE_AT_A_TIME
@@ -1480,6 +1601,9 @@ BOOL CWorldBuilderDoc::OnOpenDocument(LPCTSTR lpszPathName)
 		return FALSE;
 
 	Create3DView();
+
+	// After Create3DView, so TheWaterRenderObj exists to pick up a changed water texture.
+	applyMapIni(lpszPathName);
 
 	// Load shapefill sidecar if it exists next to the map file
 	ShapeFillTool::loadShapes(CString(lpszPathName));
