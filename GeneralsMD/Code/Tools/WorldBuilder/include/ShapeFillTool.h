@@ -68,7 +68,13 @@ struct ShapeDef {
 struct LineDef {
 	Int id;
 	std::vector<ShapeVertex> points;
-	LineDef() : id(0) {}
+	// TheSuperHackers @feature Nemellud 04/08/2026 ShapeFillTool: draw a width alongside a line.
+	// 0 = plain line. Non-zero makes the overlay show two bank lines at +/- half this width,
+	// so a line can preview the footprint of something that will be built along it - a river
+	// channel, say - while it is being drawn and dragged. Purely an overlay hint: it changes
+	// no terrain and creates no shape. In tiles, like every other ShapeFill coordinate.
+	Int previewWidth;
+	LineDef() : id(0), previewWidth(0) {}
 };
 
 // -------------------------------------------------------------------------
@@ -190,6 +196,29 @@ public:
 	}
 	static void setInnerTexClass(Int t)  { m_innerTexClass = t; }
 	static void setBorderTexClass(Int t) { m_borderTexClass = t; }
+	// TheSuperHackers @feature Nemellud 04/08/2026 ShapeFillTool: line width preview.
+	// Applies to the line being drawn (which has no LineDef yet) and, if one is selected,
+	// to that line as well - so changing the width updates what is already on screen.
+	static void setLinePreviewWidth(Int w) {
+		m_linePreviewWidth = w;
+		if (m_selectedLineId >= 0) {
+			for (auto& l : m_lines) {
+				if (l.id == m_selectedLineId) { l.previewWidth = w; break; }
+			}
+		}
+	}
+	static Int  getLinePreviewWidth() { return m_linePreviewWidth; }
+
+	// TheSuperHackers @feature Nemellud 07/08/2026 ShapeFillTool: mark a spot on a line.
+	// Set to a tile position to draw that stretch of the width preview in red instead of
+	// blue, with a ring around it. Meant for pointing at the place a validator objects to:
+	// on a long winding line a written coordinate is something you have to go hunting for.
+	// Deliberately NOT part of LineDef - it is transient feedback about the current
+	// settings, not a property of the line, and has no business in the saved session.
+	// Pass -1 for x to clear.
+	static void setLineFold(Int x, Int y) { m_lineFoldX = x; m_lineFoldY = y; }
+	static Int  getLineFoldX() { return m_lineFoldX; }
+	static Int  getLineFoldY() { return m_lineFoldY; }
 
 	static Int  getInnerHeight()    { return m_innerHeight; }
 	static Bool getAutoBlend()      { return m_autoBlend; }
@@ -276,6 +305,11 @@ private:
 	static std::vector<LineDef>    m_lines;
 	static Int                     m_nextLineId;
 	static Int                     m_selectedLineId;
+	// TheSuperHackers @feature Nemellud 04/08/2026 ShapeFillTool: width for the line being
+	// drawn - the draft is a bare vertex list with no LineDef to carry it.
+	static Int                     m_linePreviewWidth;
+	static Int                     m_lineFoldX;
+	static Int                     m_lineFoldY;
 	static Bool                    m_lineDrawing;
 	static std::vector<ShapeVertex> m_lineDraft;
 
@@ -340,12 +374,17 @@ private:
 	static void tileToView(WbView* pView, Int tx, Int ty, Int& sx, Int& sy);
 	static void viewToCorner(WbView* pView, CPoint viewPt, Int& cx, Int& cy);
 	static void cornerToView(WbView* pView, Int cx, Int cy, Int& sx, Int& sy);
+	// TheSuperHackers @feature Nemellud 04/08/2026 ShapeFillTool: fractional corner coords
+	static void cornerToViewF(WbView* pView, float cx, float cy, Int& sx, Int& sy);
 	static void tileCenterToView(WbView* pView, Int tx, Int ty, Int& sx, Int& sy);
 
 	// ---- Private helpers — drawing ----
 	static void drawShape(CDC* pDC, WbView* pView, const ShapeDef& shape, Bool selected);
 	static void drawHandle(CDC* pDC, Int sx, Int sy, Bool active);
 	static void drawInnerHandle(CDC* pDC, Int sx, Int sy);
+	// TheSuperHackers @feature Nemellud 04/08/2026 ShapeFillTool: line width footprint
+	static void drawWidthPreview(CDC* pDC, WbView* pView,
+	                             const std::vector<ShapeVertex>& pts, Int width);
 	static void drawCoordLabel(CDC* pDC, Int sx, Int sy, Int tx, Int ty);
 	static void drawSegmentStaircase(CDC* pDC, WbView* pView, Int cx0, Int cy0, Int cx1, Int cy1);
 	static void drawCircleStaircase(CDC* pDC, WbView* pView, Int cx, Int cy, Int r);

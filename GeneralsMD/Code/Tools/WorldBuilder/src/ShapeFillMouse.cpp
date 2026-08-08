@@ -126,6 +126,7 @@ void ShapeFillTool::mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWo
 				LineDef line;
 				line.id     = m_nextLineId++;
 				line.points = m_lineDraft;
+				line.previewWidth = m_linePreviewWidth;
 				m_lines.push_back(line);
 			}
 			m_lineDrawing = false;

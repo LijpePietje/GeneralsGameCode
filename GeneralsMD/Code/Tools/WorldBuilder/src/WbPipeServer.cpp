@@ -25,6 +25,7 @@
 // Safe: pipe allows max 1 connection, SendMessage is synchronous.
 ShapeDef     g_wbPipeCreateShape;
 bool         g_wbPipeCreateApply = false;
+int          g_wbSfGetLineId     = -1;
 WbHeightRect g_wbPipeHeightRect  = {0,0,0,0,0};
 WbPlaceReq      g_wbPlaceReq        = {0};
 WbLinkReq       g_wbLinkReq         = {0};
@@ -228,6 +229,43 @@ static bool JsonGetFloat(const char* json, const char* key, float* out)
 	if (*p == '"') p++;
 	if ((*p >= '0' && *p <= '9') || *p == '-') { *out = (float)atof(p); return true; }
 	return false;
+}
+
+// TheSuperHackers @feature Nemellud 02/08/2026 ShapeFillTool: read "key":[{"x":N,"y":M},...] so a
+// polygon shape can be built from the pipe. Without this shapefill_create accepts type:"polygon"
+// but leaves points empty, producing a shape rasterizePolygon silently ignores.
+// Same hand-rolled scan as OnWbAddTrigger uses for polygon triggers: walk to the '[', then take
+// one point per '}'-delimited block.
+static int JsonGetPointArray(const char* json, const char* key,
+                             std::vector<ShapeVertex>& out, int maxPts)
+{
+	char search[64];
+	_snprintf(search, sizeof(search), "\"%s\"", key);
+	const char* p = strstr(json, search);
+	if (!p) return 0;
+	p = strchr(p, '[');
+	if (!p) return 0;
+	p++;
+	out.clear();
+	while (*p && *p != ']' && (int)out.size() < maxPts) {
+		const char* endObj = strchr(p, '}');
+		if (!endObj) break;
+		const char* px = strstr(p, "\"x\"");
+		const char* py = strstr(p, "\"y\"");
+		if (px && px < endObj && py && py < endObj) {
+			const char* cx = strchr(px, ':');
+			const char* cy = strchr(py, ':');
+			if (cx && cy) {
+				ShapeVertex v;
+				v.tx = atoi(cx + 1);
+				v.ty = atoi(cy + 1);
+				out.push_back(v);
+			}
+		}
+		p = endObj + 1;
+		if (*p == ',') p++;
+	}
+	return (int)out.size();
 }
 
 // TheSuperHackers @feature Nemellud 17/07/2026 EmbeddedMode: base64 decode for map_height_blit payloads
@@ -584,6 +622,16 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 		return true;
 	}
 
+	// TheSuperHackers @feature Nemellud 03/08/2026 ShapeFillTool: hand back the points of a
+	// drawn line. shapefill_get_state only reports how many there are, so a caller could see
+	// that a line exists but not where it runs.
+	if (strcmp(cmd, "shapefill_get_line") == 0) {
+		g_wbSfGetLineId = -1;
+		JsonGetInt(json, "id", &g_wbSfGetLineId);
+		SendMessage(hwnd, WM_WB_SF_GET_LINE, (WPARAM)responseBufLen, (LPARAM)responseBuf);
+		return true;
+	}
+
 	if (strcmp(cmd, "shapefill_get_state") == 0) {
 		SendMessage(hwnd, WM_WB_SF_GET_STATE, (WPARAM)responseBufLen, (LPARAM)responseBuf);
 		return true;
@@ -604,6 +652,9 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 		if (JsonGetBool(json, "innerAutoBlend",    &bval)) { PostMessage(hwnd, WM_WB_SF_SETINT, SF_PROP_INNER_AUTO_BLEND,    (LPARAM)(bval?1:0)); anySet = true; }
 		if (JsonGetBool(json, "innerBlendInward",  &bval)) { PostMessage(hwnd, WM_WB_SF_SETINT, SF_PROP_INNER_BLEND_INWARD,  (LPARAM)(bval?1:0)); anySet = true; }
 		if (JsonGetBool(json, "autoSave",          &bval)) { PostMessage(hwnd, WM_WB_SF_SETINT, SF_PROP_AUTO_SAVE,           (LPARAM)(bval?1:0)); anySet = true; }
+		if (JsonGetInt(json,  "linePreviewWidth",  &ival)) { PostMessage(hwnd, WM_WB_SF_SETINT, SF_PROP_LINE_PREVIEW_WIDTH,  (LPARAM)ival); anySet = true; }
+		if (JsonGetInt(json,  "lineFoldX",         &ival)) { PostMessage(hwnd, WM_WB_SF_SETINT, SF_PROP_LINE_FOLD_X,         (LPARAM)ival); anySet = true; }
+		if (JsonGetInt(json,  "lineFoldY",         &ival)) { PostMessage(hwnd, WM_WB_SF_SETINT, SF_PROP_LINE_FOLD_Y,         (LPARAM)ival); anySet = true; }
 		_snprintf(responseBuf, responseBufLen, "{\"ok\":%s}", anySet ? "true" : "false");
 		return anySet;
 	}
@@ -882,6 +933,10 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 		bool bval;
 		if (JsonGetBool(json, "autoBlend", &bval)) def.autoBlendOuter = bval ? TRUE : FALSE;
 		JsonGetBool(json, "apply", &g_wbPipeCreateApply);
+		// Read last: the scalar getters strstr over the whole document, so keeping the point
+		// arrays at the end keeps their "x"/"y" keys out of their way.
+		JsonGetPointArray(json, "points",      def.points,      1024);
+		JsonGetPointArray(json, "innerPoints", def.innerPoints, 1024);
 		g_wbPipeCreateShape = def;
 		int newId = (int)SendMessage(hwnd, WM_WB_SF_CREATE_PIPE, 0, 0);
 		_snprintf(responseBuf, responseBufLen, "{\"ok\":true,\"id\":%d}", newId);

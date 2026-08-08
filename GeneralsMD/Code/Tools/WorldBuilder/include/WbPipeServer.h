@@ -172,6 +172,10 @@ private:
 #define WM_WB_TEXTURE_BLIT   (WM_USER + 207)   // sync: write texture band into pending copy; reads g_wbTextureBlitReq
 // TheSuperHackers @feature Nemellud 01/08/2026 MapINI: re-read the open map's map.ini
 #define WM_WB_RELOAD_MAP_INI (WM_USER + 208)   // sync: reapply map.ini next to the open map; wParam=bufLen, lParam=buf
+// TheSuperHackers @feature Nemellud 03/08/2026 ShapeFillTool: read one drawn line's points
+#define WM_WB_SF_GET_LINE    (WM_USER + 209)   // sync: line geometry by id; reads g_wbSfGetLineId
+
+extern int g_wbSfGetLineId;
 
 extern char g_wbSavePath[260];
 
@@ -255,6 +259,11 @@ struct WbPlantGroveReq {
 #define SF_PROP_INNER_AUTO_BLEND   9
 #define SF_PROP_INNER_BLEND_INWARD 10
 #define SF_PROP_AUTO_SAVE          11
+// TheSuperHackers @feature Nemellud 04/08/2026 ShapeFillTool: width drawn alongside a line
+#define SF_PROP_LINE_PREVIEW_WIDTH 12
+// TheSuperHackers @feature Nemellud 07/08/2026 ShapeFillTool: tile to mark in red on a line
+#define SF_PROP_LINE_FOLD_X        13
+#define SF_PROP_LINE_FOLD_Y        14
 
 // ── SF action keys (WM_WB_SF_ACTION wParam) ──────────────────────────────────
 #define SF_ACT_APPLY       1

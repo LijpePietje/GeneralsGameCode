@@ -19,6 +19,11 @@
 #include "wbview3d.h"
 
 #include <algorithm>
+#include <cmath>
+#include <vector>
+
+// Fractional tile coordinate, for the smoothed preview curve.
+struct CPoint2F { float x, y; };
 
 // -------------------------------------------------------------------------
 // Coordinate conversion
@@ -58,9 +63,18 @@ void ShapeFillTool::viewToCorner(WbView* pView, CPoint viewPt, Int& cx, Int& cy)
 
 void ShapeFillTool::cornerToView(WbView* pView, Int cx, Int cy, Int& sx, Int& sy)
 {
+	cornerToViewF(pView, (float)cx, (float)cy, sx, sy);
+}
+
+// TheSuperHackers @feature Nemellud 04/08/2026 ShapeFillTool: sub-corner precision.
+// The line width preview offsets points by half a width, which lands between corners.
+// Rounding those to whole corners first makes a narrow preview jitter while dragging,
+// so keep the fraction all the way into screen space.
+void ShapeFillTool::cornerToViewF(WbView* pView, float cx, float cy, Int& sx, Int& sy)
+{
 	Coord3D worldPt;
-	worldPt.x = (Real)(cx * 10);
-	worldPt.y = (Real)(cy * 10);
+	worldPt.x = cx * 10.0f;
+	worldPt.y = cy * 10.0f;
 	worldPt.z = 0;
 	CPoint viewPt;
 	pView->docToViewCoords(worldPt, &viewPt);
@@ -68,6 +82,179 @@ void ShapeFillTool::cornerToView(WbView* pView, Int cx, Int cy, Int& sx, Int& sy
 	viewPt.y += pView->getScrollOffsetY();
 	sx = viewPt.x;
 	sy = viewPt.y;
+}
+
+// Smooth a clicked polyline the same way the UI does before it builds the real outline:
+// two Chaikin corner-cutting passes, then centripetal Catmull-Rom.
+//
+// Centripetal (alpha = 0.5) rather than uniform on purpose: uniform Catmull-Rom forms
+// cusps and self-intersecting loops when control points are unevenly spaced, which
+// hand-clicked points always are.
+//
+// This is a deliberate second implementation of chaikinRelax() + catmullRomSample() in
+// worldbuilder-ui-poc/js/river-geom.js. It has to stay in step with that file: if the two
+// drift, the preview stops showing what you will actually get. It lives here because the
+// preview has to follow a drag live, and a round trip to the UI per mouse move would mean
+// dozens of synchronous pipe calls a second.
+static std::vector<CPoint2F> smoothCentreLine(const std::vector<ShapeVertex>& pts)
+{
+	std::vector<CPoint2F> p;
+	p.reserve(pts.size());
+	for (const auto& v : pts) p.push_back({ (float)v.tx, (float)v.ty });
+	if (p.size() < 3) return p;
+
+	// Chaikin: relaxes tight corners before splining.
+	for (Int pass = 0; pass < 2; pass++) {
+		std::vector<CPoint2F> next;
+		next.reserve(p.size() * 2);
+		next.push_back(p.front());
+		for (size_t i = 0; i + 1 < p.size(); i++) {
+			const CPoint2F& a = p[i];
+			const CPoint2F& b = p[i + 1];
+			next.push_back({ a.x * 0.75f + b.x * 0.25f, a.y * 0.75f + b.y * 0.25f });
+			next.push_back({ a.x * 0.25f + b.x * 0.75f, a.y * 0.25f + b.y * 0.75f });
+		}
+		next.push_back(p.back());
+		p.swap(next);
+	}
+
+	// Centripetal Catmull-Rom, sampled at roughly half a tile. First and last points are
+	// duplicated so the curve passes through the ends the user actually clicked.
+	std::vector<CPoint2F> ctrl;
+	ctrl.reserve(p.size() + 2);
+	ctrl.push_back(p.front());
+	for (const auto& q : p) ctrl.push_back(q);
+	ctrl.push_back(p.back());
+
+	auto dist = [](const CPoint2F& a, const CPoint2F& b) {
+		return sqrtf((b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y));
+	};
+	std::vector<CPoint2F> out;
+	for (size_t i = 1; i + 2 < ctrl.size(); i++) {
+		const CPoint2F& p0 = ctrl[i - 1]; const CPoint2F& p1 = ctrl[i];
+		const CPoint2F& p2 = ctrl[i + 1]; const CPoint2F& p3 = ctrl[i + 2];
+		const float t0 = 0.0f;
+		const float t1 = t0 + max(sqrtf(dist(p0, p1)), 1e-4f);
+		const float t2 = t1 + max(sqrtf(dist(p1, p2)), 1e-4f);
+		const float t3 = t2 + max(sqrtf(dist(p2, p3)), 1e-4f);
+
+		const Int steps = max(2, (Int)ceilf(dist(p1, p2) / 0.5f));
+		for (Int s = 0; s < steps; s++) {
+			const float t = t1 + (t2 - t1) * ((float)s / steps);
+			auto lerp = [&](const CPoint2F& a, const CPoint2F& b, float ta, float tb) {
+				const float f = (tb - ta) == 0.0f ? 0.0f : (t - ta) / (tb - ta);
+				return CPoint2F{ a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f };
+			};
+			const CPoint2F A1 = lerp(p0, p1, t0, t1);
+			const CPoint2F A2 = lerp(p1, p2, t1, t2);
+			const CPoint2F A3 = lerp(p2, p3, t2, t3);
+			const CPoint2F B1 = lerp(A1, A2, t0, t2);
+			const CPoint2F B2 = lerp(A2, A3, t1, t3);
+			out.push_back(lerp(B1, B2, t1, t2));
+		}
+	}
+	out.push_back(p.back());
+	return out;
+}
+
+// TheSuperHackers @feature Nemellud 04/08/2026 ShapeFillTool: draw the footprint a line
+// would have if something were built along it at `width` tiles across.
+//
+// The centre line is smoothed first, so what you see while drawing and dragging is the
+// shape you will actually get - offsetting the raw clicked polyline would show hard
+// corners where the result has curves.
+//
+// Offsets each point along the normal of its LOCAL direction, taken as a central
+// difference between its neighbours. That is what keeps a bend the same width instead of
+// pinching it, and it mirrors waterCentreLineToRing() in the UI so the preview and the
+// generated shape agree on which side is which.
+//
+// Deliberately plain lines rather than the staircase used for real geometry: this is a
+// hint, and the final outline is a smooth curve, so a staircase would misrepresent it.
+void ShapeFillTool::drawWidthPreview(CDC* pDC, WbView* pView,
+                                     const std::vector<ShapeVertex>& pts, Int width)
+{
+	if (width <= 0 || pts.size() < 2) return;
+
+	const std::vector<CPoint2F> c = smoothCentreLine(pts);
+	const Int n = (Int)c.size();
+	if (n < 2) return;
+
+	const float half = width * 0.5f;
+	std::vector<CPoint> left, right;
+	// Distance from each kept sample to the marked spot, so the stretch around it can be
+	// redrawn in red. Kept parallel to left/right rather than indexed off c, because the
+	// duplicate-point skip below means the two do not line up.
+	std::vector<float> toFold;
+	left.reserve(n);
+	right.reserve(n);
+	toFold.reserve(n);
+
+	const Bool hasFold = (m_lineFoldX >= 0);
+	for (Int i = 0; i < n; i++) {
+		const CPoint2F& prev = c[i > 0 ? i - 1 : 0];
+		const CPoint2F& next = c[i < n - 1 ? i + 1 : n - 1];
+		float dx = next.x - prev.x;
+		float dy = next.y - prev.y;
+		const float len = sqrtf(dx * dx + dy * dy);
+		if (len < 1e-4f) continue;          // duplicate point: no direction to offset along
+		dx /= len; dy /= len;
+
+		Int sx, sy;
+		cornerToViewF(pView, c[i].x - dy * half, c[i].y + dx * half, sx, sy);
+		left.push_back(CPoint(sx, sy));
+		cornerToViewF(pView, c[i].x + dy * half, c[i].y - dx * half, sx, sy);
+		right.push_back(CPoint(sx, sy));
+
+		if (hasFold) {
+			const float fdx = c[i].x - (float)m_lineFoldX;
+			const float fdy = c[i].y - (float)m_lineFoldY;
+			toFold.push_back(sqrtf(fdx * fdx + fdy * fdy));
+		} else {
+			toFold.push_back(1e9f);
+		}
+	}
+	if (left.size() < 2) return;
+
+	// PS_DASH only works on a 1px cosmetic pen, which is what reads as "preview" anyway.
+	CPen pen(PS_DASH, 1, RGB(80, 170, 255));
+	CPen* oldPen = pDC->SelectObject(&pen);
+	pDC->Polyline(left.data(),  (int)left.size());
+	pDC->Polyline(right.data(), (int)right.size());
+	// Close the ends so it reads as a footprint rather than two stray lines.
+	pDC->MoveTo(left.front());  pDC->LineTo(right.front());
+	pDC->MoveTo(left.back());   pDC->LineTo(right.back());
+	pDC->SelectObject(oldPen);
+
+	if (!hasFold) return;
+
+	// Overdraw the objectionable stretch in solid red. The radius scales with the width
+	// because that is the scale of the problem: where a channel folds, it does so over
+	// roughly its own width. A fixed radius would vanish on a wide river and swamp a creek.
+	const float R = (float)width;
+	CPen redPen(PS_SOLID, 2, RGB(230, 60, 60));
+	pDC->SelectObject(&redPen);
+
+	const Int m = (Int)left.size();
+	for (Int i = 0; i < m; ) {
+		if (toFold[i] > R) { i++; continue; }
+		Int j = i;
+		while (j + 1 < m && toFold[j + 1] <= R) j++;
+		if (j > i) {
+			pDC->Polyline(&left[i],  j - i + 1);
+			pDC->Polyline(&right[i], j - i + 1);
+		}
+		i = j + 1;
+	}
+
+	// A ring on the spot itself, so it is findable even when zoomed out far enough that
+	// the red stretch is only a few pixels long.
+	Int fsx, fsy;
+	cornerToViewF(pView, (float)m_lineFoldX, (float)m_lineFoldY, fsx, fsy);
+	CBrush* oldBrush = (CBrush*)pDC->SelectStockObject(NULL_BRUSH);
+	pDC->Ellipse(fsx - 9, fsy - 9, fsx + 9, fsy + 9);
+	pDC->SelectObject(oldBrush);
+	pDC->SelectObject(oldPen);
 }
 
 void ShapeFillTool::tileCenterToView(WbView* pView, Int tx, Int ty, Int& sx, Int& sy)
@@ -360,14 +547,20 @@ void ShapeFillTool::drawOverlayStatic(CDC* /*pDC_unused*/, WbView* pView)
 		Bool selected = (shape.id == m_selectedId);
 		drawShape(pDC, pView, shape, selected);
 		if (selected) {
-			for (const auto& h : getHandles(shape)) {
+			// TheSuperHackers @tweak Nemellud 04/08/2026 ShapeFillTool: only label a handful.
+			// A coordinate beside every handle is helpful on a 4-corner rect, but a generated
+			// shape - a river channel, say - carries dozens, and the labels then cover the very
+			// geometry you are trying to judge.
+			const std::vector<ShapeHandle> handles = getHandles(shape);
+			const Bool showCoords = ((Int)handles.size() <= 12);
+			for (const auto& h : handles) {
 				Int sx, sy;
 				tileToView(pView, h.tx, h.ty, sx, sy);
 				if (h.type == HDL_INNER_VERTEX)
 					drawInnerHandle(pDC, sx, sy);
 				else
 					drawHandle(pDC, sx, sy, false);
-				drawCoordLabel(pDC, sx, sy, h.tx, h.ty);
+				if (showCoords) drawCoordLabel(pDC, sx, sy, h.tx, h.ty);
 			}
 		}
 	}
@@ -410,9 +603,13 @@ void ShapeFillTool::drawOverlayStatic(CDC* /*pDC_unused*/, WbView* pView)
 			Int sx, sy;
 			for (const auto& pt : line.points) {
 				cornerToView(pView, pt.tx, pt.ty, sx, sy);
-				pDC->Ellipse(sx-3, sy-3, sx+3, sy+3);
+				// The selected line is the one you can drag, so give it grabbable squares
+				// instead of 3px dots you have to hunt for.
+				if (sel) drawHandle(pDC, sx, sy, false);
+				else     pDC->Ellipse(sx-3, sy-3, sx+3, sy+3);
 			}
 			pDC->SelectObject(oldPen);
+			drawWidthPreview(pDC, pView, line.points, line.previewWidth);
 		}
 	}
 
@@ -431,6 +628,9 @@ void ShapeFillTool::drawOverlayStatic(CDC* /*pDC_unused*/, WbView* pView)
 			drawHandle(pDC, sx, sy, true);
 		}
 		pDC->SelectObject(oldPen);
+		// The draft has no LineDef yet, so its width comes from the tool default —
+		// that is what makes the footprint visible while you are still clicking.
+		drawWidthPreview(pDC, pView, m_lineDraft, m_linePreviewWidth);
 	}
 
 	// Snap cursor: yellow circle at snapped corner + rubber-band staircase

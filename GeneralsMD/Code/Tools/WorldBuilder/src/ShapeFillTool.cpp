@@ -64,6 +64,9 @@ std::vector<ShapeVertex> ShapeFillTool::m_polyDraft;
 std::vector<LineDef>    ShapeFillTool::m_lines;
 Int                     ShapeFillTool::m_nextLineId   = 1;
 Int                     ShapeFillTool::m_selectedLineId = -1;
+Int                     ShapeFillTool::m_linePreviewWidth = 0;
+Int                     ShapeFillTool::m_lineFoldX = -1;
+Int                     ShapeFillTool::m_lineFoldY = -1;
 Bool                    ShapeFillTool::m_lineDrawing   = false;
 std::vector<ShapeVertex> ShapeFillTool::m_lineDraft;
 
@@ -732,7 +735,10 @@ void ShapeFillTool::saveShapes(const CString& mapPath)
 	}
 
 	for (const auto& l : m_lines) {
-		fprintf(f, "LINE %d\n", l.id);
+		// TheSuperHackers @feature Nemellud 04/08/2026 ShapeFillTool: previewWidth appended.
+		// Append only, never reorder: an older build reads "LINE %d" and ignores the rest,
+		// and loadShapes defaults the field when a session predates it.
+		fprintf(f, "LINE %d %d\n", l.id, l.previewWidth);
 		for (const auto& pt : l.points)
 			fprintf(f, "LINE_PT %d %d %d\n", l.id, pt.tx, pt.ty);
 	}
@@ -784,7 +790,11 @@ void ShapeFillTool::loadShapes(const CString& mapPath)
 				if (l.id == id) { l.points.push_back({tx, ty}); break; }
 		} else if (strncmp(line, "LINE ", 5) == 0) {
 			LineDef l;
-			sscanf(line, "LINE %d", &l.id);
+			int w = 0;
+			// sscanf returns how many fields it assigned, so a session written before
+			// previewWidth existed ("LINE 3") yields 1 and keeps the default.
+			if (sscanf(line, "LINE %d %d", &l.id, &w) < 2) w = 0;
+			l.previewWidth = w;
 			m_lines.push_back(l);
 		}
 	}
@@ -813,6 +823,7 @@ void ShapeFillTool::commitCurrentLine()
 		LineDef line;
 		line.id     = m_nextLineId++;
 		line.points = m_lineDraft;
+		line.previewWidth = m_linePreviewWidth;
 		m_lines.push_back(line);
 		pushUndo(getActiveDoc(), before);
 	}

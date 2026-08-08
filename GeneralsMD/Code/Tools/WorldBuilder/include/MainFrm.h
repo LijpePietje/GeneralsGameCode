@@ -190,6 +190,8 @@ protected:
 	afx_msg LRESULT OnWbGetMapInfo(WPARAM wParam, LPARAM lParam);
 	// TheSuperHackers @feature Nemellud 01/08/2026 MapINI: reapply the open map's map.ini
 	afx_msg LRESULT OnWbReloadMapIni(WPARAM wParam, LPARAM lParam);
+	// TheSuperHackers @feature Nemellud 03/08/2026 ShapeFillTool: read a drawn line's points
+	afx_msg LRESULT OnWbSfGetLine(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbGetHeightmap(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbGetTexturemap(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbGetObjects(WPARAM wParam, LPARAM lParam);

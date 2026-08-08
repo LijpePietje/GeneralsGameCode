@@ -124,6 +124,7 @@ BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
 	// Tier H
 	ON_MESSAGE(WM_WB_GET_MAP_INFO,    OnWbGetMapInfo)
 	ON_MESSAGE(WM_WB_RELOAD_MAP_INI,  OnWbReloadMapIni)
+	ON_MESSAGE(WM_WB_SF_GET_LINE,     OnWbSfGetLine)
 	ON_MESSAGE(WM_WB_GET_HEIGHTMAP,   OnWbGetHeightmap)
 	ON_MESSAGE(WM_WB_GET_TEXTUREMAP,  OnWbGetTexturemap)
 	ON_MESSAGE(WM_WB_GET_OBJECTS,     OnWbGetObjects)
@@ -744,27 +745,33 @@ LRESULT CMainFrame::OnWbSfGetState(WPARAM wParam, LPARAM lParam)
 	if (innerTc  >= 0) strncpy(innerTexBuf,  WorldHeightMapEdit::getTexClassName(innerTc).str(),  63);
 	if (borderTc >= 0) strncpy(borderTexBuf, WorldHeightMapEdit::getTexClassName(borderTc).str(), 63);
 
-	// Build shapes array JSON
-	char shapesJson[2048] = "[";
+	// Build shapes array JSON. Sized so the added vertex counts do not make the list
+	// truncate at fewer shapes than before.
+	char shapesJson[4096] = "[";
 	bool first = true;
 	for (const auto& s : ShapeFillTool::getShapes()) {
 		const char* typeName = (s.type == SHAPE_RECT) ? "rect" : (s.type == SHAPE_CIRCLE) ? "circle" : "polygon";
 		const char* typeLabel= (s.type == SHAPE_RECT) ? "Rect" : (s.type == SHAPE_CIRCLE) ? "Circle" : "Polygon";
-		char entry[128];
-		_snprintf(entry, sizeof(entry), "%s{\"id\":%d,\"type\":\"%s\",\"name\":\"%s #%d\"}",
-		          first ? "" : ",", s.id, typeName, typeLabel, s.id);
+		// TheSuperHackers @feature Nemellud 02/08/2026 ShapeFillTool: report the vertex counts.
+		// shapefill_create returns a valid id even for a polygon that ended up with no points,
+		// so this is the only way a caller can tell a real shape from an empty one.
+		char entry[160];
+		_snprintf(entry, sizeof(entry),
+		          "%s{\"id\":%d,\"type\":\"%s\",\"name\":\"%s #%d\",\"points\":%d,\"innerPoints\":%d}",
+		          first ? "" : ",", s.id, typeName, typeLabel, s.id,
+		          (int)s.points.size(), (int)s.innerPoints.size());
 		strncat(shapesJson, entry, sizeof(shapesJson) - strlen(shapesJson) - 2);
 		first = false;
 	}
 	strncat(shapesJson, "]", sizeof(shapesJson) - strlen(shapesJson) - 1);
 
 	// TheSuperHackers @feature Nemellud 12/06/2026 ShapeFill: lijnen in de state voor de UI-lijst
-	char linesJson[1024] = "[";
+	char linesJson[2048] = "[";
 	bool firstL = true;
 	for (const auto& l : ShapeFillTool::getLines()) {
 		char entry[96];
-		_snprintf(entry, sizeof(entry), "%s{\"id\":%d,\"points\":%d}",
-		          firstL ? "" : ",", l.id, (int)l.points.size());
+		_snprintf(entry, sizeof(entry), "%s{\"id\":%d,\"points\":%d,\"previewWidth\":%d}",
+		          firstL ? "" : ",", l.id, (int)l.points.size(), l.previewWidth);
 		strncat(linesJson, entry, sizeof(linesJson) - strlen(linesJson) - 2);
 		firstL = false;
 	}
@@ -817,6 +824,12 @@ LRESULT CMainFrame::OnWbSfSetInt(WPARAM wParam, LPARAM lParam)
 		case SF_PROP_INNER_AUTO_BLEND:   ShapeFillTool::setInnerAutoBlend(val != 0); break;
 		case SF_PROP_INNER_BLEND_INWARD: ShapeFillTool::setInnerBlendInward(val != 0); break;
 		case SF_PROP_AUTO_SAVE:          ShapeFillTool::setAutoSave(val != 0); break;
+		case SF_PROP_LINE_PREVIEW_WIDTH: ShapeFillTool::setLinePreviewWidth(val); break;
+		// Two properties rather than one packed int: the pair arrives in the same
+		// shapefill_set body, so both are applied before the repaint at the end of this
+		// handler, and -1 for x alone is enough to clear the marker.
+		case SF_PROP_LINE_FOLD_X: ShapeFillTool::setLineFold(val, ShapeFillTool::getLineFoldY()); break;
+		case SF_PROP_LINE_FOLD_Y: ShapeFillTool::setLineFold(ShapeFillTool::getLineFoldX(), val); break;
 	}
 	ShapeFillOptions::updateFromTool();
 	ShapeFillTool::syncSelectedFromPanel();
@@ -1282,6 +1295,33 @@ LRESULT CMainFrame::OnWbContourGet(WPARAM wParam, LPARAM lParam)
 }
 
 // ── Tier H — Map data read-back ───────────────────────────────────────────────
+
+// TheSuperHackers @feature Nemellud 03/08/2026 ShapeFillTool: return one drawn line's points.
+// Lets a caller use the tool's own line drawing - which WorldBuilder previews live while the
+// user clicks - as the input for something else, instead of collecting clicks itself.
+LRESULT CMainFrame::OnWbSfGetLine(WPARAM wParam, LPARAM lParam)
+{
+	char* buf = (char*)lParam;
+	int   len = (int)wParam;
+	if (!buf || len < 64) return 0;
+
+	for (const auto& l : ShapeFillTool::getLines()) {
+		if (l.id != g_wbSfGetLineId) continue;
+		int pos = _snprintf(buf, len, "{\"ok\":true,\"id\":%d,\"previewWidth\":%d,\"points\":[",
+		                    l.id, l.previewWidth);
+		bool first = true;
+		for (const auto& p : l.points) {
+			if (pos >= len - 32) break;
+			pos += _snprintf(buf + pos, len - pos, "%s{\"x\":%d,\"y\":%d}",
+			                 first ? "" : ",", p.tx, p.ty);
+			first = false;
+		}
+		if (pos < len - 4) { buf[pos++] = ']'; buf[pos++] = '}'; buf[pos] = '\0'; }
+		return 0;
+	}
+	_snprintf(buf, len, "{\"ok\":false,\"error\":\"no line with id %d\"}", g_wbSfGetLineId);
+	return 0;
+}
 
 // TheSuperHackers @feature Nemellud 01/08/2026 MapINI: reapply the open map's map.ini.
 // Lets the UI show a changed water look immediately instead of after reopening the map.
@@ -1890,6 +1930,11 @@ extern WbPlantGroveReq g_wbPlantGroveReq;
 LRESULT CMainFrame::OnWbSfCreatePipe(WPARAM, LPARAM)
 {
 	const ShapeDef& def = g_wbPipeCreateShape;
+	// TheSuperHackers @bugfix Nemellud 02/08/2026 ShapeFillTool: drop the selection first.
+	// setBorderWidth() below clears innerPoints on whatever shape is currently selected, and
+	// that is still the PREVIOUS one at this point - so creating a second shape from the pipe
+	// silently threw away the hand-edited inner polygon of the first. addShape() re-selects.
+	ShapeFillTool::setSelectedId(-1);
 	// Sync static tool state from the shape def so applySelectedShape uses the correct values
 	ShapeFillTool::setInnerHeight(def.innerHeight);
 	ShapeFillTool::setBorderWidth(def.borderWidth);
