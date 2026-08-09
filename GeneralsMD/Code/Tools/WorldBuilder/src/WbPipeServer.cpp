@@ -29,6 +29,7 @@ int          g_wbSfGetLineId     = -1;
 WbHeightRect g_wbPipeHeightRect  = {0,0,0,0,0};
 WbPlaceReq      g_wbPlaceReq        = {0};
 WbFxPreviewReq  g_wbFxPreview       = {0};
+char            g_wbDelObjResult[128] = "";
 WbLinkReq       g_wbLinkReq         = {0};
 float           g_wbRotateAngleDeg  = 0.0f;
 WbPlantTreeReq  g_wbPlantTreeReq    = {0};
@@ -1088,6 +1089,12 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 		JsonGetStr(json, "name", g_wbFxPreview.name, sizeof(g_wbFxPreview.name));
 		int ok = (int)SendMessage(hwnd, WM_WB_FX_PREVIEW, 0, 0);
 		_snprintf(responseBuf, responseBufLen, "{\"ok\":%s}", ok ? "true" : "false");
+		return true;
+	}
+
+	if (strcmp(cmd, "delete_objects_by_template") == 0) {
+		SendMessage(hwnd, WM_WB_DEL_OBJ_BY_TMPL, (WPARAM)responseBufLen, (LPARAM)json);
+		strncpy(responseBuf, g_wbDelObjResult, responseBufLen);
 		return true;
 	}
 

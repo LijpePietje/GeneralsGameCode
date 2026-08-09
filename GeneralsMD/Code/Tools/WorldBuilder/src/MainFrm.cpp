@@ -40,6 +40,7 @@
 #include "W3DDevice/GameClient/BaseHeightMap.h"
 
 extern WbFxPreviewReq g_wbFxPreview;
+extern char g_wbDelObjResult[128];
 #include "WorldBuilder.h"
 #include "WorldBuilderDoc.h"
 #include "WorldBuilderView.h"
@@ -132,6 +133,7 @@ BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
 	ON_MESSAGE(WM_WB_RELOAD_MAP_INI,  OnWbReloadMapIni)
 	ON_MESSAGE(WM_WB_SF_GET_LINE,     OnWbSfGetLine)
 	ON_MESSAGE(WM_WB_FX_PREVIEW,      OnWbFxPreview)
+	ON_MESSAGE(WM_WB_DEL_OBJ_BY_TMPL, OnWbDelObjByTemplate)
 	ON_MESSAGE(WM_WB_GET_HEIGHTMAP,   OnWbGetHeightmap)
 	ON_MESSAGE(WM_WB_GET_TEXTUREMAP,  OnWbGetTexturemap)
 	ON_MESSAGE(WM_WB_GET_OBJECTS,     OnWbGetObjects)
@@ -1328,6 +1330,7 @@ LRESULT CMainFrame::OnWbContourGet(WPARAM wParam, LPARAM lParam)
 // the thing itself running in the map. Replaces whatever was playing; an empty name just
 // clears. Deliberately separate from startMapIniEffects - this is a scratch preview, not
 // the map's own effects, and the two must not be confused with each other.
+
 LRESULT CMainFrame::OnWbFxPreview(WPARAM /*wParam*/, LPARAM /*lParam*/)
 {
 	if (TheParticleSystemManager == nullptr) return 0;
@@ -2976,6 +2979,47 @@ LRESULT CMainFrame::OnWbDelPlayer(WPARAM, LPARAM lParam)
 }
 
 // TheSuperHackers @feature Nemellud 31/05/2026 EmbeddedMode: delete waypoint by name via pipe
+// TheSuperHackers @feature Nemellud 09/08/2026 WorldBuilder: remove every object of one
+// template.
+//
+// Objects placed over the pipe carry no name, so select-by-name cannot reach them and the
+// effect panel had no way to take its emitters back off the map - its remove button only
+// forgot the assignment while the objects stayed put.
+//
+// One DeleteObjectUndoable over the whole selection, so a slip is a single Ctrl+Z.
+LRESULT CMainFrame::OnWbDelObjByTemplate(WPARAM wParam, LPARAM lParam)
+{
+	const char* json = (const char*)lParam;
+	g_wbDelObjResult[0] = '\0';
+	CWorldBuilderDoc* pDoc = (CWorldBuilderDoc*)GetActiveDocument();
+	if (pDoc == nullptr) {
+		_snprintf(g_wbDelObjResult, sizeof(g_wbDelObjResult), "{\"ok\":false,\"error\":\"no map\"}");
+		return 0;
+	}
+	char tmpl[128] = "";
+	MF_JsonGetStr(json, "template", tmpl, sizeof(tmpl));
+	if (tmpl[0] == '\0') {
+		_snprintf(g_wbDelObjResult, sizeof(g_wbDelObjResult), "{\"ok\":false,\"error\":\"missing template\"}");
+		return 0;
+	}
+
+	for (MapObject* pObj = MapObject::getFirstMapObject(); pObj; pObj = pObj->getNext())
+		pObj->setSelected(false);
+
+	Int hits = 0;
+	for (MapObject* pObj = MapObject::getFirstMapObject(); pObj; pObj = pObj->getNext()) {
+		if (pObj->getName() == AsciiString(tmpl)) { pObj->setSelected(true); hits++; }
+	}
+	if (hits > 0) {
+		DeleteObjectUndoable* pUndo = new DeleteObjectUndoable(pDoc);
+		pDoc->AddAndDoUndoable(pUndo);
+		REF_PTR_RELEASE(pUndo);
+		pDoc->updateAllViews();
+	}
+	_snprintf(g_wbDelObjResult, sizeof(g_wbDelObjResult), "{\"ok\":true,\"deleted\":%d}", hits);
+	return 0;
+}
+
 LRESULT CMainFrame::OnWbDelWaypoint(WPARAM, LPARAM lParam)
 {
 	char* json = (char*)lParam;

@@ -195,6 +195,7 @@ protected:
 	// TheSuperHackers @feature Nemellud 03/08/2026 ShapeFillTool: read a drawn line's points
 	afx_msg LRESULT OnWbSfGetLine(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbFxPreview(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbDelObjByTemplate(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbGetHeightmap(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbGetTexturemap(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbGetObjects(WPARAM wParam, LPARAM lParam);

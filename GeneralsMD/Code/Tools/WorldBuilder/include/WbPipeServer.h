@@ -178,6 +178,10 @@ private:
 // effect picker can show what a name looks like. A particle effect has no thumbnail - it is
 // motion - so the only honest preview is the effect itself, running in the map.
 #define WM_WB_FX_PREVIEW     (WM_USER + 210)   // sync: play named system; reads g_wbFxPreview
+// TheSuperHackers @feature Nemellud 09/08/2026 WorldBuilder: remove every object of one
+// template. Objects placed over the pipe carry no name, so they cannot be picked by name;
+// the effect panel needs a way to take its emitters back off the map.
+#define WM_WB_DEL_OBJ_BY_TMPL (WM_USER + 211)   // sync: delete all objects of a template
 
 extern int g_wbSfGetLineId;
 
