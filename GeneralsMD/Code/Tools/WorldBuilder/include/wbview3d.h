@@ -309,6 +309,10 @@ public:
 	static void startMapIniEffects(void);
 	/// Keep the running emitters on their markers; called once per repaint.
 	static void syncMapIniEffects(void);
+	/// Re-read which objects map.ini turns into emitters (marker placement).
+	static void refreshEffectHosts(void);
+	/// True for an object map.ini gives a ParticleSysBone to.
+	static Bool isEffectCarrier(const AsciiString& name);
 
 	AsciiString getModelNameAndScale(MapObject *pMapObj, Real *scale, BodyDamageType curDamageState);
 

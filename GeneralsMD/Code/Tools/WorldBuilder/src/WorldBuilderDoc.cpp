@@ -1588,6 +1588,10 @@ void CWorldBuilderDoc::applyMapIni(LPCTSTR mapPathName)
 	// toggle ever started them. Whatever map.ini we just applied is the one to show.
 	if (WbView3d::getShowEffects()) {
 		WbView3d::startMapIniEffects();
+	} else {
+		// Even with the effects off, the view has to know which objects are emitters: that
+		// is what keeps their marker on the surface instead of buried at the author's z.
+		WbView3d::refreshEffectHosts();
 	}
 }
 

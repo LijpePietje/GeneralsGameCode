@@ -99,6 +99,7 @@
 #include "W3DDevice/GameClient/W3DDisplay.h"
 #include "GameClient/GameClient.h"
 #include <map>
+#include <set>
 #include <vector>
 
 #include <d3dx8.h>
@@ -260,6 +261,47 @@ static void collectEffectObjects(const char* iniPath,
 // Only IDs are stored, never MapObject pointers: those die whenever the user deletes one.
 static std::vector<ParticleSystemID> s_fxSystems;
 
+// Objects this map.ini turns into effect emitters. Kept apart from the running systems
+// because it is needed even with the effect view switched off - it decides where their
+// marker is drawn, and a marker you cannot see or click is worse than no marker at all.
+static std::set<AsciiString> s_fxHosts;
+
+// TheSuperHackers @feature Nemellud 09/08/2026 WorldBuilder: effect carrier markers on top
+Bool WbView3d::isEffectCarrier(const AsciiString& name)
+{
+	return s_fxHosts.find(name) != s_fxHosts.end();
+}
+
+static void rememberEffectHosts(const std::map<AsciiString, std::vector<AsciiString> >& effects)
+{
+	s_fxHosts.clear();
+	for (std::map<AsciiString, std::vector<AsciiString> >::const_iterator it = effects.begin();
+	     it != effects.end(); ++it) {
+		s_fxHosts.insert(it->first);
+	}
+}
+
+// ----------------------------------------------------------------------------
+/** Re-read which objects this map turns into emitters, without starting anything.
+ *
+ * Separate from startMapIniEffects because the marker position depends on this and the
+ * markers are drawn whether or not the effect view is on.
+ */
+void WbView3d::refreshEffectHosts(void)
+{
+	s_fxHosts.clear();
+	CWorldBuilderDoc* pDoc = CWorldBuilderDoc::GetActiveDoc();
+	if (pDoc == nullptr) return;
+	CString mapPath = pDoc->GetPathName();
+	if (mapPath.IsEmpty()) return;
+	Int slash = mapPath.ReverseFind('\\');
+	if (slash < 0) return;
+
+	std::map<AsciiString, std::vector<AsciiString> > effects;
+	collectEffectObjects((LPCTSTR)(mapPath.Left(slash + 1) + "map.ini"), effects);
+	rememberEffectHosts(effects);
+}
+
 // Position and heading in one matrix. Assembling it fresh each time is what makes it safe to
 // reapply every frame; the rotate helpers on ParticleSystem compose instead of replace.
 static Matrix3D fxTransform(const Coord3D& loc, Real angle)
@@ -287,6 +329,7 @@ void WbView3d::startMapIniEffects(void)
 
 	std::map<AsciiString, std::vector<AsciiString> > effects;
 	collectEffectObjects((LPCTSTR)iniPath, effects);
+	rememberEffectHosts(effects);
 	if (effects.empty()) return;
 
 	Int started = 0, missing = 0;
@@ -1715,7 +1758,19 @@ void WbView3d::invalObjectInView(MapObject *pMapObjIn)
 
 
 		Coord3D loc = *pMapObj->getLocation();
-		loc.z += m_heightMapRenderObj->getHeightMapHeight(loc.x, loc.y, nullptr);
+		// TheSuperHackers @feature Nemellud 09/08/2026 WorldBuilder: effect carrier markers on top
+		//
+		// An object's stored z is normally an offset above the ground, and adding it is right
+		// for anything you can see. An effect carrier is different: it has no model in the
+		// game, only a marker here, and map authors sink them deliberately - Sakura Forest's
+		// waterfall sits at -40, which put its marker 21 units inside the terrain where it
+		// could be neither seen nor clicked. A handle you cannot reach is not a handle, and
+		// nothing is lost by lifting it: the game draws nothing there at all.
+		if (isEffectCarrier(pMapObj->getName())) {
+			loc.z = m_heightMapRenderObj->getHeightMapHeight(loc.x, loc.y, nullptr);
+		} else {
+			loc.z += m_heightMapRenderObj->getHeightMapHeight(loc.x, loc.y, nullptr);
+		}
 
 		const ThingTemplate *tTemplate = pMapObj->getThingTemplate();
 		if (tTemplate && tTemplate->isKindOf(KINDOF_OPTIMIZED_TREE)) {
