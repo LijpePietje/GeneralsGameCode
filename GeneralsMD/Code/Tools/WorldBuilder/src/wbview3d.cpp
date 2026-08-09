@@ -253,10 +253,28 @@ static void collectEffectObjects(const char* iniPath,
 }
 
 
+// The emitters started from map.ini, in the order the map objects were walked. Kept so a
+// dragged or turned marker takes its effect with it: without this the systems held the
+// transform they were born with, and moving the object moved a red marker away from an
+// effect that stayed put - which reads as the marker not being connected to anything.
+// Only IDs are stored, never MapObject pointers: those die whenever the user deletes one.
+static std::vector<ParticleSystemID> s_fxSystems;
+
+// Position and heading in one matrix. Assembling it fresh each time is what makes it safe to
+// reapply every frame; the rotate helpers on ParticleSystem compose instead of replace.
+static Matrix3D fxTransform(const Coord3D& loc, Real angle)
+{
+	Matrix3D m(true);
+	m.Rotate_Z(angle);
+	m.Set_Translation(Vector3(loc.x, loc.y, loc.z));
+	return m;
+}
+
 void WbView3d::startMapIniEffects(void)
 {
 	if (TheParticleSystemManager == nullptr) return;
 	TheParticleSystemManager->reset();
+	s_fxSystems.clear();
 
 	CWorldBuilderDoc* pDoc = CWorldBuilderDoc::GetActiveDoc();
 	if (pDoc == nullptr) return;
@@ -300,16 +318,72 @@ void WbView3d::startMapIniEffects(void)
 			if (TheTerrainRenderObject != nullptr) {
 				loc.z = TheTerrainRenderObject->getHeightMapHeight(loc.x, loc.y, nullptr);
 			}
-			sys->setPosition(&loc);
-
 			// And face the way the object faces. A bow wake or a drain pipe is directional:
 			// the map author turned the carrier to aim the flow, and dropping that made the
-			// river run the wrong way. setPosition only writes the translation, so rotating
-			// afterwards keeps the position we just set.
-			sys->rotateLocalTransformZ(pObj->getAngle());
+			// river run the wrong way.
+			//
+			// Built as one transform rather than setPosition + rotateLocalTransformZ: the
+			// rotate call multiplies into whatever is already there, so the same pair applied
+			// again every frame - which syncMapIniEffects does - would spin the system.
+			Matrix3D xform = fxTransform(loc, pObj->getAngle());
+			sys->setLocalTransform(&xform);
+			s_fxSystems.push_back(sys->getSystemID());
 			started++;
 		}
 	}
+}
+
+// ----------------------------------------------------------------------------
+/** Keep the running emitters on their markers, once per repaint.
+ *
+ * Dragging a marker or turning it has to move the effect with it, or the marker is not a
+ * handle on anything - which is exactly how it looked. Walking the objects again each frame
+ * is cheap at editor scale (a few hundred objects) and avoids holding MapObject pointers
+ * across frames, which would dangle the moment one is deleted.
+ *
+ * If the count no longer lines up - an object added or removed - restart rather than guess
+ * which emitter belongs to what. That costs one visible reset, and only when the map changed
+ * shape.
+ */
+void WbView3d::syncMapIniEffects(void)
+{
+	if (TheParticleSystemManager == nullptr || s_fxSystems.empty()) return;
+
+	CWorldBuilderDoc* pDoc = CWorldBuilderDoc::GetActiveDoc();
+	if (pDoc == nullptr) return;
+	CString mapPath = pDoc->GetPathName();
+	if (mapPath.IsEmpty()) return;
+	Int slash = mapPath.ReverseFind('\\');
+	if (slash < 0) return;
+	CString iniPath = mapPath.Left(slash + 1) + "map.ini";
+
+	std::map<AsciiString, std::vector<AsciiString> > effects;
+	collectEffectObjects((LPCTSTR)iniPath, effects);
+	if (effects.empty()) return;
+
+	size_t idx = 0;
+	for (MapObject* pObj = MapObject::getFirstMapObject(); pObj != nullptr; pObj = pObj->getNext()) {
+		std::map<AsciiString, std::vector<AsciiString> >::const_iterator it =
+			effects.find(pObj->getName());
+		if (it == effects.end()) continue;
+
+		Coord3D loc = *pObj->getLocation();
+		if (TheTerrainRenderObject != nullptr) {
+			loc.z = TheTerrainRenderObject->getHeightMapHeight(loc.x, loc.y, nullptr);
+		}
+
+		for (size_t i = 0; i < it->second.size(); i++) {
+			if (TheParticleSystemManager->findTemplate(it->second[i]) == nullptr) continue;
+			if (idx >= s_fxSystems.size()) { startMapIniEffects(); return; }
+
+			ParticleSystem* sys = TheParticleSystemManager->findParticleSystem(s_fxSystems[idx]);
+			if (sys == nullptr) { startMapIniEffects(); return; }
+			Matrix3D xform = fxTransform(loc, pObj->getAngle());
+			sys->setLocalTransform(&xform);
+			idx++;
+		}
+	}
+	if (idx != s_fxSystems.size()) startMapIniEffects();
 }
 
 #define SAMPLE_DYNAMIC_LIGHT	1
@@ -2331,6 +2405,9 @@ void WbView3d::render()
 	++m_updateCount;
 
 	if (TheParticleSystemManager != nullptr && m_showEffects) {
+		// Markers first: an emitter that has been dragged should emit from where it is now,
+		// not from where it was when the map was opened.
+		syncMapIniEffects();
 		// The manager falls back to its own clock when there is no GameLogic
 		// (ParticleSys.cpp getParticleFrame), so this is safe in the editor.
 		TheParticleSystemManager->update();

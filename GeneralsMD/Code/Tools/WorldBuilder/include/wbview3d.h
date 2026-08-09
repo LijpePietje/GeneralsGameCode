@@ -307,6 +307,8 @@ public:
 	static void setShowEffectsRaw(Bool s) { m_showEffects = s; }
 	/// (Re)start the map.ini effects for the open map. Call after a map load or an edit.
 	static void startMapIniEffects(void);
+	/// Keep the running emitters on their markers; called once per repaint.
+	static void syncMapIniEffects(void);
 
 	AsciiString getModelNameAndScale(MapObject *pMapObj, Real *scale, BodyDamageType curDamageState);
 
