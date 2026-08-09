@@ -1458,10 +1458,17 @@ void CWorldBuilderDoc::updateHeightMap(WorldHeightMap *htMap, Bool partial, cons
 // renders water with the very same WaterRenderObjClass the game uses, reading the very same
 // TheWaterTransparency (W3DWater.cpp drawTrapezoidWater / drawRiverWater).
 //
-// Only the blocks listed here are honoured. Object/ParticleSystem/Terrain overrides are
-// deliberately ignored: they would silently change the editor's object and texture palettes,
-// which are cached and surfaced over the REST API.
-static const char* const MAPINI_PREVIEW_BLOCKS[] = { "WaterTransparency" };
+// Only the blocks listed here are honoured. Object and Terrain overrides stay out:
+// they would silently change the editor's object and texture palettes, which are cached
+// and surfaced over the REST API, and those must keep describing the game rather than one
+// map's dressing.
+//
+// ParticleSystem is in, because that objection does not apply to it: it touches no palette.
+// A map that recolours or resizes an effect has to show that in the editor, or the preview
+// is lying about the map. One caveat worth knowing - parseParticleSystemDefinition writes
+// straight into the existing template with no override chain, so a recolour sticks for the
+// rest of the editor session, including on other maps.
+static const char* const MAPINI_PREVIEW_BLOCKS[] = { "WaterTransparency", "ParticleSystem" };
 
 // Drop the overrides a previously opened map installed, so they do not stack up map after map.
 // This mirrors what GameLogic::reset does between missions.
@@ -1473,16 +1480,29 @@ static void resetMapIniOverrides(void)
 	}
 }
 
-// True when 'line' is the INI block header for 'block' - the name alone on the line,
-// ignoring leading whitespace and a trailing comment.
+// True when 'line' opens the INI block 'block', ignoring leading whitespace and a trailing
+// comment.
+//
+// Two shapes: a bare header like "WaterTransparency", and a named one like
+// "ParticleSystem DamMist". Insisting on nothing after the keyword - which is all this did
+// while WaterTransparency was the only entry - silently skips every named block.
 static Bool isIniBlockHeader(const char* line, const char* block)
 {
 	while (*line == ' ' || *line == '\t') line++;
 	const size_t len = strlen(block);
 	if (_strnicmp(line, block, len) != 0) return FALSE;
+
 	const char* rest = line + len;
+	// The keyword has to end here, so "ParticleSystemFoo" does not match "ParticleSystem".
+	if (*rest != 0 && *rest != ' ' && *rest != '\t' && *rest != '\r' && *rest != '\n' && *rest != ';')
+		return FALSE;
+
+	while (*rest == ' ' || *rest == '\t') rest++;
+	if (*rest == 0 || *rest == '\r' || *rest == '\n' || *rest == ';') return TRUE;   // bare header
+
+	while (*rest && *rest != ' ' && *rest != '\t' && *rest != '\r' && *rest != '\n' && *rest != ';') rest++;
 	while (*rest == ' ' || *rest == '\t' || *rest == '\r' || *rest == '\n') rest++;
-	return (*rest == 0 || *rest == ';');
+	return (*rest == 0 || *rest == ';');                                             // header + one name
 }
 
 static Bool isIniBlockEnd(const char* line)
