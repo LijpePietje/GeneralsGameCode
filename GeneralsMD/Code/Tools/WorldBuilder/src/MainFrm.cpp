@@ -1337,7 +1337,20 @@ LRESULT CMainFrame::OnWbFxPreview(WPARAM /*wParam*/, LPARAM /*lParam*/)
 	TheParticleSystemManager->reset();
 
 	if (g_wbFxPreview.name[0] == '\0') {
-		WbView3d::setShowEffects(false);
+		// Stopping a preview is not the same as switching the effect view off. It used to be
+		// both, and since the panel stops its preview whenever a map is opened, that quietly
+		// undid the effects the map had just started - the view said off, the menu said on,
+		// and the next click did the opposite of what it read.
+		//
+		// So put back what the map itself has, and only stop drawing if nobody wants it.
+		if (WbView3d::getEffectsWanted()) {
+			WbView3d::setShowEffectsRaw(true);
+			WbView3d::startMapIniEffects();
+		} else {
+			WbView3d::setShowEffectsRaw(false);
+		}
+		CWorldBuilderDoc* pDoc = CWorldBuilderDoc::GetActiveDoc();
+		if (pDoc) pDoc->updateAllViews();
 		return 1;
 	}
 

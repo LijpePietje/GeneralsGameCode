@@ -190,6 +190,7 @@ private:
 	// Static because the toggle belongs to the feature, not to one view: both the 3D view
 	// and the menu handler read it, and a second view must not disagree with the first.
 	static Bool							m_showEffects;
+	static Bool							m_effectsWanted;
 	RefRenderObjListClass		m_lightList;
 	LayerClass							*m_layer;
 	LayerClass							*m_buildLayer;
@@ -305,12 +306,14 @@ public:
 	/// Flip the drawing flag only. setShowEffects() also (re)starts the map's own effects,
 	/// which would wipe a picker preview the moment it was shown.
 	static void setShowEffectsRaw(Bool s) { m_showEffects = s; }
+	/// What the user last asked for, as opposed to what is running right now.
+	static Bool getEffectsWanted(void) { return m_effectsWanted; }
 	/// (Re)start the map.ini effects for the open map. Call after a map load or an edit.
-	static void startMapIniEffects(void);
+	static void startMapIniEffects(const char* mapPath = nullptr);
 	/// Keep the running emitters on their markers; called once per repaint.
 	static void syncMapIniEffects(void);
 	/// Re-read which objects map.ini turns into emitters (marker placement).
-	static void refreshEffectHosts(void);
+	static void refreshEffectHosts(const char* mapPath = nullptr);
 	/// True for an object map.ini gives a ParticleSysBone to.
 	static Bool isEffectCarrier(const AsciiString& name);
 

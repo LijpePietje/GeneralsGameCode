@@ -1586,12 +1586,16 @@ void CWorldBuilderDoc::applyMapIni(LPCTSTR mapPathName)
 	// Same reasoning for the effects: opening a map with the effect view already on used to
 	// leave the previous map's emitters running, or nothing at all, because only the View
 	// toggle ever started them. Whatever map.ini we just applied is the one to show.
-	if (WbView3d::getShowEffects()) {
-		WbView3d::startMapIniEffects();
+	// Effects follow what the user last asked for, which starts out as on: a map's effects
+	// are part of what it looks like, and having to go and switch them on for every map is
+	// not a choice anyone wants to keep making. Turning them off keeps them off.
+	if (WbView3d::getEffectsWanted()) {
+		WbView3d::setShowEffectsRaw(true);
+		WbView3d::startMapIniEffects(mapPathName);
 	} else {
 		// Even with the effects off, the view has to know which objects are emitters: that
 		// is what keeps their marker on the surface instead of buried at the author's z.
-		WbView3d::refreshEffectHosts();
+		WbView3d::refreshEffectHosts(mapPathName);
 	}
 }
 

@@ -179,9 +179,15 @@ public:
 	}
 };
 
-// Off by default: the preview costs a particle update per repaint, and a map with no
-// effects should not pay for a feature it does not use.
+// Starts off and is switched on when a map is applied, not at construction. Effects need
+// terrain to sit on, and the particle pass wants a render path that only exists once a map
+// is open - running it before that crashed the editor on its first frame.
 Bool WbView3d::m_showEffects = false;
+
+// What the user last asked for, which is a different question from what is running now.
+// On, because a map's effects are part of what it looks like; someone who turns them off
+// keeps them off across maps for the rest of the session.
+Bool WbView3d::m_effectsWanted = true;
 
 // TheSuperHackers @feature Nemellud 09/08/2026 WorldBuilder: map.ini effect preview
 //
@@ -190,6 +196,7 @@ Bool WbView3d::m_showEffects = false;
 // the way back in is cheap - they are emitters, not state worth keeping.
 void WbView3d::setShowEffects(Bool s)
 {
+	m_effectsWanted = s;                 // an explicit choice outlives the map it was made on
 	if (m_showEffects == s) return;
 	m_showEffects = s;
 	if (TheParticleSystemManager == nullptr) return;
@@ -287,12 +294,17 @@ static void rememberEffectHosts(const std::map<AsciiString, std::vector<AsciiStr
  * Separate from startMapIniEffects because the marker position depends on this and the
  * markers are drawn whether or not the effect view is on.
  */
-void WbView3d::refreshEffectHosts(void)
+void WbView3d::refreshEffectHosts(const char* mapPath0)
 {
 	s_fxHosts.clear();
-	CWorldBuilderDoc* pDoc = CWorldBuilderDoc::GetActiveDoc();
-	if (pDoc == nullptr) return;
-	CString mapPath = pDoc->GetPathName();
+	CString mapPath;
+	if (mapPath0 != nullptr && mapPath0[0] != 0) {
+		mapPath = mapPath0;
+	} else {
+		CWorldBuilderDoc* pDoc = CWorldBuilderDoc::GetActiveDoc();
+		if (pDoc == nullptr) return;
+		mapPath = pDoc->GetPathName();
+	}
 	if (mapPath.IsEmpty()) return;
 	Int slash = mapPath.ReverseFind('\\');
 	if (slash < 0) return;
@@ -312,15 +324,24 @@ static Matrix3D fxTransform(const Coord3D& loc, Real angle)
 	return m;
 }
 
-void WbView3d::startMapIniEffects(void)
+void WbView3d::startMapIniEffects(const char* mapPath0)
 {
 	if (TheParticleSystemManager == nullptr) return;
 	TheParticleSystemManager->reset();
 	s_fxSystems.clear();
 
-	CWorldBuilderDoc* pDoc = CWorldBuilderDoc::GetActiveDoc();
-	if (pDoc == nullptr) return;
-	CString mapPath = pDoc->GetPathName();
+	// The caller may know the path when the document does not. Opening a map runs this from
+	// applyMapIni, before GetPathName() has been set, so asking the document there gave an
+	// empty string and started nothing: the view said the effects were on and the map stayed
+	// still until you toggled it off and on again.
+	CString mapPath;
+	if (mapPath0 != nullptr && mapPath0[0] != 0) {
+		mapPath = mapPath0;
+	} else {
+		CWorldBuilderDoc* pDoc = CWorldBuilderDoc::GetActiveDoc();
+		if (pDoc == nullptr) return;
+		mapPath = pDoc->GetPathName();
+	}
 	if (mapPath.IsEmpty()) return;
 
 	Int slash = mapPath.ReverseFind('\\');
