@@ -324,6 +324,11 @@ static const NamedCmd VIEW_TOGGLES[] = {
 	{"show_wireframe",     32934},
 	{"show_top_down",      32944},
 	{"show_extra_blends",  33339},
+	// TheSuperHackers @feature Nemellud 09/08/2026 WorldBuilder: map.ini effect preview.
+	// Reachable over the pipe because embedded mode strips the menu bar entirely
+	// (WS_POPUP, no caption - WorldBuilder.cpp), so a View menu item alone is unreachable
+	// for anyone driving the editor from the shell.
+	{"show_effects",       33349},
 	{"show_clouds",        32945},
 	{"show_soft_water",    33335},
 	{"show_macrotexture",  32956},

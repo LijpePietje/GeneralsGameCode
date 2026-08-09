@@ -289,6 +289,7 @@ BEGIN
         MENUITEM "Snap To Grid\tCtrl+Shft+G",   ID_VIEW_SNAPTOGRID
         MENUITEM SEPARATOR
         MENUITEM "Show Brush Feedback",         ID_VIEW_BRUSHFEEDBACK
+        MENUITEM "Show Map.ini Effects",         ID_VIEW_SHOWEFFECTS
         MENUITEM SEPARATOR
         MENUITEM "Reload Textures",             ID_VIEW_RELOADTEXTURES
         MENUITEM SEPARATOR

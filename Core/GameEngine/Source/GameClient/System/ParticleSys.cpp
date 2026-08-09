@@ -61,6 +61,27 @@
 // the singleton
 ParticleSystemManager *TheParticleSystemManager = nullptr;
 
+// TheSuperHackers @feature Nemellud 09/08/2026 ParticleSys: a frame source for tools
+//
+// Particles time everything against the running game: TheGameClient->getFrame() for the
+// timestamps that drive lifetime, alpha and colour keys, and TheGameLogic->getFrame() to keep
+// the manager from stepping twice within one logic frame.
+//
+// WorldBuilder links this same code to preview the effects a map.ini hangs on its objects,
+// but the editor creates neither subsystem - there is no game client and no game logic at
+// all. Every update dereferenced a null pointer, so a single particle was enough to take the
+// tool down.
+//
+// While a game runs, TheGameClient always exists, getParticleFrame() returns exactly what
+// TheGameClient->getFrame() returned before, and s_toolFrame is never read or written. The
+// fallback can only be reached with no client at all, which is not a state the game has.
+static UnsignedInt s_toolFrame = 0;
+
+static inline UnsignedInt getParticleFrame(void)
+{
+	return TheGameClient != nullptr ? TheGameClient->getFrame() : s_toolFrame;
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -298,7 +319,7 @@ Particle::Particle( ParticleSystem *system, const ParticleInfo *info )
 
 	m_lifetime = info->m_lifetime;
 	m_lifetimeLeft = info->m_lifetime;
-	m_createTimestamp = TheGameClient->getFrame();
+	m_createTimestamp = getParticleFrame();
 	m_personality = 0;
 
 	m_size = info->m_size;
@@ -430,7 +451,7 @@ Bool Particle::update()
 
 		if (m_alphaTargetKey < MAX_KEYFRAMES && m_alphaKey[ m_alphaTargetKey ].frame)
 		{
-			if (TheGameClient->getFrame() - m_createTimestamp >= m_alphaKey[ m_alphaTargetKey ].frame)
+			if (getParticleFrame() - m_createTimestamp >= m_alphaKey[ m_alphaTargetKey ].frame)
 			{
 				m_alpha = m_alphaKey[ m_alphaTargetKey ].value;
 				m_alphaTargetKey++;
@@ -456,7 +477,7 @@ Bool Particle::update()
 
 	if (m_colorTargetKey < MAX_KEYFRAMES && m_colorKey[ m_colorTargetKey ].frame)
 	{
-		if (TheGameClient->getFrame() - m_createTimestamp >= m_colorKey[ m_colorTargetKey ].frame)
+		if (getParticleFrame() - m_createTimestamp >= m_colorKey[ m_colorTargetKey ].frame)
 		{
 			// can't set, because of colorscale
 			// m_color = m_colorKey[ m_colorTargetKey ].color;
@@ -525,7 +546,7 @@ void Particle::doWindMotion()
 	// when we're attached objects and drawables we offset by that position as well
 	if( ObjectID attachedObj = m_system->getAttachedObject() )
 	{
-		Object *obj = TheGameLogic->findObjectByID( attachedObj );
+		Object *obj = TheGameLogic != nullptr ? TheGameLogic->findObjectByID( attachedObj ) : nullptr;
 
 		if( obj )
 		{
@@ -540,7 +561,7 @@ void Particle::doWindMotion()
 	}
 	else if( DrawableID attachedDraw = m_system->getAttachedDrawable() )
 	{
-		Drawable *draw = TheGameClient->findDrawableByID( attachedDraw );
+		Drawable *draw = TheGameClient != nullptr ? TheGameClient->findDrawableByID( attachedDraw ) : nullptr;
 
 		if( draw )
 		{
@@ -1136,7 +1157,7 @@ ParticleSystem::ParticleSystem( const ParticleSystemTemplate *sysTemplate,
 
 	m_delayLeft = (UnsignedInt)sysTemplate->m_initialDelay.getValue();
 
-	m_startTimestamp = TheGameClient->getFrame();
+	m_startTimestamp = getParticleFrame();
 	m_systemLifetimeLeft = sysTemplate->m_systemLifetime;
 	if (sysTemplate->m_systemLifetime)
 		m_isForever = false;
@@ -1744,9 +1765,13 @@ Particle *ParticleSystem::createParticle( const ParticleInfo *info,
 		// all particesl are being skipped (excluding special fps independent particles at
 		// getMinDynamicParticleSkipPriority())
 		//
-		if( priority < TheGameLODManager->getMinDynamicParticlePriority() ||
+		// The level-of-detail manager throttles particles against the frame rate. A tool has
+		// no LOD manager and no frame rate to throttle against, so emit everything; skipping
+		// this check is the whole point of a preview. See getParticleFrame above.
+		if( TheGameLODManager != nullptr &&
+				(priority < TheGameLODManager->getMinDynamicParticlePriority() ||
 				(priority < TheGameLODManager->getMinDynamicParticleSkipPriority() &&
-				 TheGameLODManager->isParticleSkipped()) )
+				 TheGameLODManager->isParticleSkipped())) )
 			return nullptr;
 
 		if ( getParticleCount() > 0 && priority == AREA_EFFECT && m_isGroundAligned && TheParticleSystemManager->getFieldParticleCount() > (UnsignedInt)TheGlobalData->m_maxFieldParticleCount )
@@ -1910,7 +1935,7 @@ Bool ParticleSystem::update( Int localPlayerIndex  )
 		// system actually "starts" once initial delay is over
 		/// @todo reset start time when system is stopped/started
 		if (m_delayLeft == 0)
-			m_startTimestamp = TheGameClient->getFrame();
+			m_startTimestamp = getParticleFrame();
 
 		return true;
 	}
@@ -1928,7 +1953,7 @@ Bool ParticleSystem::update( Int localPlayerIndex  )
 
 	if (m_attachedToDrawableID)
 	{
-		Drawable *attachedTo = TheGameClient->findDrawableByID( m_attachedToDrawableID );
+		Drawable *attachedTo = TheGameClient != nullptr ? TheGameClient->findDrawableByID( m_attachedToDrawableID ) : nullptr;
 
 		if (attachedTo)
 		{
@@ -1950,7 +1975,7 @@ Bool ParticleSystem::update( Int localPlayerIndex  )
 	}
 	else if (m_attachedToObjectID)
 	{
-		Object *objectAttachedTo = TheGameLogic->findObjectByID( m_attachedToObjectID );
+		Object *objectAttachedTo = TheGameLogic != nullptr ? TheGameLogic->findObjectByID( m_attachedToObjectID ) : nullptr;
 
 		if (objectAttachedTo)
 		{
@@ -2051,7 +2076,11 @@ Bool ParticleSystem::update( Int localPlayerIndex  )
 					{
 						// generate this particle's unique attributes
 						const ParticleInfo *info = generateParticleInfo(i, count);
-						if (!m_isEmitAboveGroundOnly || (info->m_pos.z >= TheTerrainLogic->getGroundHeight(info->m_pos.x, info->m_pos.y)))
+						// TheTerrainLogic is another subsystem a tool need not have; without it
+						// there is no ground height to compare against, so emit rather than
+						// crash. See getParticleFrame above.
+						if (!m_isEmitAboveGroundOnly || TheTerrainLogic == nullptr ||
+						    (info->m_pos.z >= TheTerrainLogic->getGroundHeight(info->m_pos.x, info->m_pos.y)))
 						{
 							// actually create a particle
 							Particle *p = createParticle( info, priority );
@@ -2984,12 +3013,19 @@ void ParticleSystemManager::reset()
 //DECLARE_PERF_TIMER(ParticleSystemManager)
 void ParticleSystemManager::update()
 {
-	if (m_lastLogicFrameUpdate == TheGameLogic->getFrame()) {
-		return;
-	}
+	// The guard exists so several renders inside one logic frame do not step the simulation
+	// several times. A tool has no logic frames to gate on, so it steps once per call and
+	// advances the fallback clock itself - which is the cadence its repaint gives it.
+	if (TheGameLogic != nullptr) {
+		if (m_lastLogicFrameUpdate == TheGameLogic->getFrame()) {
+			return;
+		}
 
-	// update the last logic frame.
-	m_lastLogicFrameUpdate = TheGameLogic->getFrame();
+		// update the last logic frame.
+		m_lastLogicFrameUpdate = TheGameLogic->getFrame();
+	} else {
+		++s_toolFrame;
+	}
 
 	//USE_PERF_TIMER(ParticleSystemManager)
 	ParticleSystemListIt it = m_allParticleSystemList.begin();
@@ -3317,7 +3353,7 @@ void ParticleSystemManager::preloadAssets( TimeOfDay timeOfDay )
 		if (tmplate->m_particleType == ParticleSystemInfo::PARTICLE &&
 			 	(! tmplate->m_particleTypeName.isEmpty()))
 		{
-			TheDisplay->preloadTextureAssets(tmplate->m_particleTypeName);
+			if (TheDisplay != nullptr) TheDisplay->preloadTextureAssets(tmplate->m_particleTypeName);
 		}
 	}
 }

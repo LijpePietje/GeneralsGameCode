@@ -184,6 +184,12 @@ private:
 	Int											m_updateCount;
 	UINT										m_timer;
 	DrawObject							*m_drawObject;
+	// TheSuperHackers @feature Nemellud 09/08/2026 WorldBuilder: forwards a RenderInfoClass
+	// to DoParticles so map.ini effects can be previewed. See wbview3d.cpp.
+	RenderObjClass					*m_particleRenderObj;
+	// Static because the toggle belongs to the feature, not to one view: both the 3D view
+	// and the menu handler read it, and a second view must not disagree with the first.
+	static Bool							m_showEffects;
 	RefRenderObjListClass		m_lightList;
 	LayerClass							*m_layer;
 	LayerClass							*m_buildLayer;
@@ -292,6 +298,12 @@ public:
 	void setLighting(const GlobalData::TerrainLighting *tl, Int whichLighting, Int whichLight=0);
 
 	DrawObject *getDrawObject() {return m_drawObject;};
+
+	// TheSuperHackers @feature Nemellud 09/08/2026 WorldBuilder: map.ini effect preview
+	static Bool getShowEffects() { return m_showEffects; }
+	static void setShowEffects(Bool s);
+	/// (Re)start the map.ini effects for the open map. Call after a map load or an edit.
+	static void startMapIniEffects(void);
 
 	AsciiString getModelNameAndScale(MapObject *pMapObj, Real *scale, BodyDamageType curDamageState);
 

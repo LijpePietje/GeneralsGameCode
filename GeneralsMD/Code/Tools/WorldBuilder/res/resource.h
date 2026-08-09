@@ -676,6 +676,7 @@
 #define ID_WINDOW_PREVIEW1024X768       32951
 #define ID_WINDOW_2DWINDOW              32952
 #define ID_VIEW_BRUSHFEEDBACK           32954
+#define ID_VIEW_SHOWEFFECTS             33349
 #define ID_MOLD_TOOL                    32955
 #define ID_VIEW_SHOWMACROTEXTURE        32956
 #define ID_EDIT_SELECTMACROTEXTURE      32957
@@ -812,7 +813,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_3D_CONTROLS                     1
 #define _APS_NEXT_RESOURCE_VALUE        242
-#define _APS_NEXT_COMMAND_VALUE         33347
+#define _APS_NEXT_COMMAND_VALUE         33350
 #define _APS_NEXT_CONTROL_VALUE         1354
 #define _APS_NEXT_SYMED_VALUE           101
 #endif

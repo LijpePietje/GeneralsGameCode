@@ -144,6 +144,8 @@ protected:
 	afx_msg void OnMove(int x, int y);
 	afx_msg void OnViewBrushfeedback();
 	afx_msg void OnUpdateViewBrushfeedback(CCmdUI* pCmdUI);
+	afx_msg void OnViewShoweffects();
+	afx_msg void OnUpdateViewShoweffects(CCmdUI* pCmdUI);
 	afx_msg void OnDestroy();
 	afx_msg void OnTimer(UINT nIDEvent);
 	afx_msg void OnEditCameraoptions();

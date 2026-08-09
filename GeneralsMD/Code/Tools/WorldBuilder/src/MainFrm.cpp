@@ -82,6 +82,8 @@ BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
 	ON_WM_MOVE()
 	ON_COMMAND(ID_VIEW_BRUSHFEEDBACK, OnViewBrushfeedback)
 	ON_UPDATE_COMMAND_UI(ID_VIEW_BRUSHFEEDBACK, OnUpdateViewBrushfeedback)
+	ON_COMMAND(ID_VIEW_SHOWEFFECTS, OnViewShoweffects)
+	ON_UPDATE_COMMAND_UI(ID_VIEW_SHOWEFFECTS, OnUpdateViewShoweffects)
 	ON_WM_DESTROY()
 	ON_WM_TIMER()
 	ON_WM_CANCELMODE()
@@ -647,6 +649,21 @@ void CMainFrame::OnViewBrushfeedback()
 void CMainFrame::OnUpdateViewBrushfeedback(CCmdUI* pCmdUI)
 {
 	pCmdUI->SetCheck(DrawObject::isFeedbackEnabled()?1:0);
+}
+
+// TheSuperHackers @feature Nemellud 09/08/2026 WorldBuilder: preview map.ini effects
+//
+// Not remembered between sessions, unlike the brush feedback above. The preview only means
+// anything for a map that has a map.ini with effects in it, and starting up with particles
+// running on a map that has none would just look like a bug.
+void CMainFrame::OnViewShoweffects()
+{
+	WbView3d::setShowEffects(!WbView3d::getShowEffects());
+}
+
+void CMainFrame::OnUpdateViewShoweffects(CCmdUI* pCmdUI)
+{
+	pCmdUI->SetCheck(WbView3d::getShowEffects() ? 1 : 0);
 }
 
 void CMainFrame::OnDestroy()

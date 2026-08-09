@@ -94,7 +94,11 @@
 #include "ImpassableOptions.h"
 #include "ShapeFillTool.h"
 #include "ShapeFillOptions.h"
-
+#include "GameClient/ParticleSys.h"
+#include "W3DDevice/GameClient/W3DDisplay.h"
+#include "GameClient/GameClient.h"
+#include <map>
+#include <vector>
 
 #include <d3dx8.h>
 
@@ -112,6 +116,175 @@ class SkeletonSceneClass;
 #define WINDOW_HEIGHT				480
 #define UPDATE_TIME					100  /* 10 frames a second */
 #define MOUSE_WHEEL_FACTOR	32
+
+// TheSuperHackers @feature Nemellud 09/08/2026 WorldBuilder: show map.ini particle effects
+//
+// The effects a map.ini hangs on an object (ParticleSysBone on a replaced Draw module) are
+// invisible in the editor: WorldBuilder draws map objects as bare W3D models via
+// MapObject::getRenderObj, never as game Drawables, so no Draw module is ever instantiated
+// and no bone line is ever read. You had to launch the game to see whether a waterfall was
+// in the right place.
+//
+// The particle machinery itself is already here - WorldBuilder.cpp inits a
+// W3DParticleSystemManager, and ParticleSystemManager::init() loads Data\INI\ParticleSystem
+// on its own, so every template the game knows is already loaded. Two things are missing:
+// nothing advances the simulation, and nothing draws it. Drawing needs a RenderInfoClass,
+// which only exists inside a render pass - the game gets one because RTS3DScene::
+// Customized_Render calls DoParticles(rinfo), and WorldBuilder uses a plain
+// SkeletonSceneClass that does not.
+//
+// So: a render object that does nothing but forward the rinfo it is handed. Put last in the
+// overlay scene, it draws after the terrain and the objects, which is where particles belong.
+
+extern void DoParticles(RenderInfoClass & rinfo);
+
+
+class ParticlePreviewRenderObj : public RenderObjClass
+{
+public:
+	virtual RenderObjClass* Clone() const override { return NEW_REF(ParticlePreviewRenderObj, ()); }
+	virtual int  Class_ID() const override { return RenderObjClass::CLASSID_UNKNOWN; }
+	virtual void Render(RenderInfoClass& rinfo) override
+	{
+		// Guarded, and not only to save work: running the particle pass unconditionally
+		// crashed the editor at startup (exit code 0xC0000409) the moment the first frame
+		// was drawn, before any effect existed. The game sets up render state around this
+		// pass that WorldBuilder does not, so it must stay off unless asked for.
+		if (!WbView3d::getShowEffects()) return;
+		if (TheParticleSystemManager == nullptr) return;
+		// doParticles reads TheTerrainRenderObject->getMaximumVisibleBox and TheGlobalData;
+		// in the editor the terrain object only exists once a map is open.
+		if (TheTerrainRenderObject == nullptr) return;
+		static Bool loggedOnce = false;
+		TheParticleSystemManager->queueParticleRender();
+		DoParticles(rinfo);
+		static Bool r2 = false;
+	}
+	// Never cull this away: the particles it draws are anywhere on the map, and their extent
+	// has nothing to do with where this object happens to sit.
+	virtual void Get_Obj_Space_Bounding_Sphere(SphereClass& sphere) const override
+	{
+		sphere.Init(Vector3(0, 0, 0), 100000.0f);
+	}
+	virtual void Get_Obj_Space_Bounding_Box(AABoxClass& box) const override
+	{
+		box.Init(Vector3(0, 0, 0), Vector3(100000.0f, 100000.0f, 100000.0f));
+	}
+};
+
+// Off by default: the preview costs a particle update per repaint, and a map with no
+// effects should not pay for a feature it does not use.
+Bool WbView3d::m_showEffects = false;
+
+// TheSuperHackers @feature Nemellud 09/08/2026 WorldBuilder: map.ini effect preview
+//
+// Turning the preview off has to stop the systems as well as the drawing, or the particles
+// already in flight hang in the air for as long as their lifetime says. Rebuilding them on
+// the way back in is cheap - they are emitters, not state worth keeping.
+void WbView3d::setShowEffects(Bool s)
+{
+	if (m_showEffects == s) return;
+	m_showEffects = s;
+	if (TheParticleSystemManager == nullptr) return;
+	if (s) startMapIniEffects();
+	else   TheParticleSystemManager->reset();
+	CWorldBuilderDoc* pDoc = CWorldBuilderDoc::GetActiveDoc();
+	if (pDoc) pDoc->updateAllViews();
+}
+
+// Read the map.ini next to the open map and start every particle system it hangs on an
+// object, at the position of each such object on the map.
+//
+// Deliberately a hand-rolled scan rather than the INI parser. Feeding these blocks to INI
+// would install real Object overrides in the editor's template store, which is exactly what
+// applyMapIni refuses to do (see MAPINI_PREVIEW_BLOCKS in WorldBuilderDoc.cpp): the object
+// palette is cached and published over the REST API, and it must keep describing the game's
+// objects, not this map's dressing. Here nothing is registered - the names are read and used
+// to spawn emitters, and the store never hears about it.
+//
+// Only ParticleSysBone is read. The bone itself is ignored: these effect objects carry
+// Model = NONE, so there is no skeleton to look a bone up in, and the object's own position
+// is the only anchor there is.
+static void collectEffectObjects(const char* iniPath,
+                                 std::map<AsciiString, std::vector<AsciiString> >& out)
+{
+	FILE* f = fopen(iniPath, "rt");
+	if (f == nullptr) return;
+
+	char line[1028];                       // INI_MAX_CHARS_PER_LINE
+	AsciiString currentObject;
+	while (fgets(line, sizeof(line), f) != nullptr) {
+		char* p = line;
+		while (*p == ' ' || *p == '\t') p++;
+		if (*p == ';' || *p == '\0') continue;
+
+		char word[256] = "", rest[512] = "";
+		if (sscanf(p, "%255s %511[^\r\n]", word, rest) < 1) continue;
+
+		if (stricmp(word, "Object") == 0) {
+			char name[256] = "";
+			if (sscanf(rest, "%255s", name) == 1) currentObject = name;
+			continue;
+		}
+		if (stricmp(word, "End") == 0) continue;   // blocks nest; only Object..ParticleSysBone matters
+		if (currentObject.isEmpty()) continue;
+
+		if (stricmp(word, "ParticleSysBone") == 0) {
+			// "ParticleSysBone = <bone> <system>". The '=' is optional in this format and
+			// the maps in the wild use it, so skip it rather than counting it as the bone -
+			// doing that reads the bone as the system name and finds no template at all.
+			const char* v = rest;
+			while (*v == ' ' || *v == '\t') v++;
+			if (*v == '=') { v++; while (*v == ' ' || *v == '\t') v++; }
+
+			char bone[256] = "", sys[256] = "";
+			if (sscanf(v, "%255s %255s", bone, sys) == 2 && stricmp(sys, "NONE") != 0) {
+				out[currentObject].push_back(AsciiString(sys));
+			}
+		}
+	}
+	fclose(f);
+}
+
+
+void WbView3d::startMapIniEffects(void)
+{
+	if (TheParticleSystemManager == nullptr) return;
+	TheParticleSystemManager->reset();
+
+	CWorldBuilderDoc* pDoc = CWorldBuilderDoc::GetActiveDoc();
+	if (pDoc == nullptr) return;
+	CString mapPath = pDoc->GetPathName();
+	if (mapPath.IsEmpty()) return;
+
+	Int slash = mapPath.ReverseFind('\\');
+	if (slash < 0) return;
+	CString iniPath = mapPath.Left(slash + 1) + "map.ini";
+
+	std::map<AsciiString, std::vector<AsciiString> > effects;
+	collectEffectObjects((LPCTSTR)iniPath, effects);
+	if (effects.empty()) return;
+
+	Int started = 0, missing = 0;
+	for (MapObject* pObj = MapObject::getFirstMapObject(); pObj != nullptr; pObj = pObj->getNext()) {
+		std::map<AsciiString, std::vector<AsciiString> >::const_iterator it =
+			effects.find(pObj->getName());
+		if (it == effects.end()) continue;
+
+		for (size_t i = 0; i < it->second.size(); i++) {
+			const ParticleSystemTemplate* tmpl = TheParticleSystemManager->findTemplate(it->second[i]);
+			if (tmpl == nullptr) {                    // a system this map names but the game does not have
+				missing++;
+				continue;
+			}
+			// nieuwe build kost. Leeg of afwezig = alles.
+			ParticleSystem* sys = TheParticleSystemManager->createParticleSystem(tmpl);
+			if (sys == nullptr) continue;
+			sys->setPosition(pObj->getLocation());
+			started++;
+		}
+	}
+}
 
 #define SAMPLE_DYNAMIC_LIGHT	1
 #ifdef SAMPLE_DYNAMIC_LIGHT
@@ -392,6 +565,7 @@ WbView3d::WbView3d() :
 	m_needToLoadRoads(0),
 	m_timer(0),
 	m_drawObject(nullptr),
+	m_particleRenderObj(nullptr),
 	m_layer(nullptr),
 	m_buildLayer(nullptr),
 	m_intersector(nullptr),
@@ -614,6 +788,21 @@ void WbView3d::initAssets()
 	m_assetManager->Register_Prototype_Loader(&_ParticleEmitterLoader );
 	m_assetManager->Register_Prototype_Loader(&_AggregateLoader);
 	m_assetManager->Set_WW3D_Load_On_Demand(true);
+
+	// TheSuperHackers @feature Nemellud 09/08/2026 WorldBuilder: map.ini effect preview.
+	//
+	// The editor owns its asset manager and never creates a W3DDisplay, so the static
+	// W3DDisplay::m_assetManager stays null. W3DParticleSystemManager::doParticles fetches
+	// every particle's texture through exactly that static, so the first particle that
+	// actually reached the screen took the editor down - which read as "particles crash
+	// WorldBuilder" while the real answer was that nothing had told the particle renderer
+	// where to load textures from.
+	//
+	// Point it at ours. Nothing else in the editor uses this static, and the game sets it
+	// from its own display long before any particle exists.
+	if (W3DDisplay::m_assetManager == nullptr) {
+		W3DDisplay::m_assetManager = m_assetManager;
+	}
 }
 
 // ----------------------------------------------------------------------------
@@ -2115,6 +2304,17 @@ void WbView3d::render()
 {
 	++m_updateCount;
 
+	if (TheParticleSystemManager != nullptr && m_showEffects) {
+		// The manager falls back to its own clock when there is no GameLogic
+		// (ParticleSys.cpp getParticleFrame), so this is safe in the editor.
+		TheParticleSystemManager->update();
+	}
+
+	// Advance the particle simulation. The editor has no game loop, so this is the only
+	// heartbeat there is - one step per repaint, driven by the existing UPDATE_TIME timer
+	// at roughly 10 frames a second. Slower than the game's 30, so effects play at about a
+	// third speed; that is fine for judging placement and shape, which is what this is for.
+
 	if (WW3D::Begin_Render(true,true,Vector3(0.5f,0.5f,0.5f), TheWaterTransparency->m_minWaterOpacity) == WW3D_ERROR_OK)
 	{
 
@@ -2343,6 +2543,9 @@ void WbView3d::initWW3D()
 		m_intersector = new IntersectionClass();
 		m_drawObject = new DrawObject();
 		m_overlayScene->Add_Render_Object(m_drawObject);
+		// Added after m_drawObject so particles land on top of the editor's own overlay.
+		m_particleRenderObj = NEW_REF(ParticlePreviewRenderObj, ());
+		m_overlayScene->Add_Render_Object(m_particleRenderObj);
 
 #if 1
 		TheWritableGlobalData->m_useShadowVolumes = true;
