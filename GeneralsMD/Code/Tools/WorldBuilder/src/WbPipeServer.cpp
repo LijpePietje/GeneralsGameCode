@@ -16,6 +16,7 @@
 #include "WbPipeServer.h"
 #include "ShapeFillTool.h"
 #include "wbview3d.h"
+#include "GameClient/ParticleSys.h"
 #include "resource.h"
 #include <string.h>
 #include <stdio.h>
@@ -457,9 +458,15 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 			// showEffects is reported, not guessed: fx_preview turns the flag on directly, so a
 			// panel that tracks its own idea of it ends up inverted - the user clicks "on" and
 			// switches it off. Same lesson as the impassable overlay.
-			"{\"ok\":true,\"ready\":%s,\"viewMode\":\"%s\",\"activeTool\":\"%s\",\"showEffects\":%s}",
+			// particles is a diagnostic that pays for itself: every "I see no effects" so far has
+			// been one of several unrelated causes - buried objects, an inverted toggle, effects
+			// never restarted - and a live count separates "nothing is running" from "it runs but
+			// is off screen" in one call.
+			"{\"ok\":true,\"ready\":%s,\"viewMode\":\"%s\",\"activeTool\":\"%s\",\"showEffects\":%s,\"particles\":%d}",
 			hwnd ? "true" : "false", viewMode, s_activeTool,
-			WbView3d::getShowEffects() ? "true" : "false");
+			WbView3d::getShowEffects() ? "true" : "false",
+			TheParticleSystemManager != nullptr
+				? (int)TheParticleSystemManager->getParticleCount() : -1);
 		return true;
 	}
 

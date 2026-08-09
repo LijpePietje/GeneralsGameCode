@@ -1582,6 +1582,13 @@ void CWorldBuilderDoc::applyMapIni(LPCTSTR mapPathName)
 	if (TheWaterRenderObj != nullptr) {
 		TheWaterRenderObj->updateMapOverrides();
 	}
+
+	// Same reasoning for the effects: opening a map with the effect view already on used to
+	// leave the previous map's emitters running, or nothing at all, because only the View
+	// toggle ever started them. Whatever map.ini we just applied is the one to show.
+	if (WbView3d::getShowEffects()) {
+		WbView3d::startMapIniEffects();
+	}
 }
 
 BOOL CWorldBuilderDoc::OnOpenDocument(LPCTSTR lpszPathName)
