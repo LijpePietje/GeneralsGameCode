@@ -2231,7 +2231,13 @@ LRESULT CMainFrame::OnWbPlaceObject(WPARAM, LPARAM)
 	CWorldBuilderDoc* pDoc = (CWorldBuilderDoc*)GetActiveDocument();
 	if (!pDoc || !g_wbPlaceReq.name[0]) return 0;
 	const WbPlaceReq& r = g_wbPlaceReq;
-	Coord3D loc = { r.wx, r.wy, 0.0f };
+	// Sit on the terrain, not at sea level. z = 0 buries an object wherever the ground is
+	// higher, which is nearly everywhere - a flat snow map already sits at 12.5. The marker
+	// still drew on the surface, so nothing looked wrong until an emitter placed this way
+	// emitted its particles underground and showed nothing at all.
+	const Real groundZ = (TheTerrainRenderObject != nullptr)
+	                   ? TheTerrainRenderObject->getHeightMapHeight(r.wx, r.wy, nullptr) : 0.0f;
+	Coord3D loc = { r.wx, r.wy, groundZ };
 	AsciiString templateName(r.name);
 	const ThingTemplate* tt = TheThingFactory->findTemplate(templateName);
 	MapObject* pNew = newInstance(MapObject)(loc, templateName, r.angle * (3.14159265f / 180.0f), 0, nullptr, tt);
