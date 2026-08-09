@@ -1404,6 +1404,14 @@ LRESULT CMainFrame::OnWbReloadMapIni(WPARAM wParam, LPARAM lParam)
 	}
 
 	pDoc->applyMapIni((LPCTSTR)pathName);
+
+	// Re-reading the map.ini has to restart the effects, or the preview keeps showing what
+	// the file said last time it was switched on. Placing an emitter writes the map.ini and
+	// reloads, and without this the newly placed object just sits there as a marker.
+	if (WbView3d::getShowEffects()) {
+		WbView3d::startMapIniEffects();
+	}
+
 	pDoc->updateAllViews();
 	_snprintf(buf, len, "{\"ok\":true}");
 	return 0;

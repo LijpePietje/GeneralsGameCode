@@ -453,8 +453,12 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 	if (strcmp(cmd, "status") == 0) {
 		const char* viewMode = s_viewTopDown ? "2d" : "3d";
 		_snprintf(responseBuf, responseBufLen,
-			"{\"ok\":true,\"ready\":%s,\"viewMode\":\"%s\",\"activeTool\":\"%s\"}",
-			hwnd ? "true" : "false", viewMode, s_activeTool);
+			// showEffects is reported, not guessed: fx_preview turns the flag on directly, so a
+			// panel that tracks its own idea of it ends up inverted - the user clicks "on" and
+			// switches it off. Same lesson as the impassable overlay.
+			"{\"ok\":true,\"ready\":%s,\"viewMode\":\"%s\",\"activeTool\":\"%s\",\"showEffects\":%s}",
+			hwnd ? "true" : "false", viewMode, s_activeTool,
+			WbView3d::getShowEffects() ? "true" : "false");
 		return true;
 	}
 
