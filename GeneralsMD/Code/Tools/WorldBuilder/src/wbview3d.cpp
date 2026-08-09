@@ -95,6 +95,7 @@
 #include "ShapeFillTool.h"
 #include "ShapeFillOptions.h"
 #include "GameClient/ParticleSys.h"
+#include "WW3D2/sortingrenderer.h"
 #include "W3DDevice/GameClient/W3DDisplay.h"
 #include "GameClient/GameClient.h"
 #include <map>
@@ -158,6 +159,11 @@ public:
 		static Bool loggedOnce = false;
 		TheParticleSystemManager->queueParticleRender();
 		DoParticles(rinfo);
+		// The game pairs these two (RTS3DScene::Customized_Render): DoParticles queues the
+		// sprites into the sorting renderer, and only the flush writes them out with the
+		// blend state their shader asked for. Without it the alpha never lands and every
+		// particle shows the square edge of its own quad.
+		SortingRendererClass::Flush();
 		static Bool r2 = false;
 	}
 	// Never cull this away: the particles it draws are anywhere on the map, and their extent
