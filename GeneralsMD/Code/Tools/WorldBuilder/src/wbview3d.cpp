@@ -286,7 +286,27 @@ void WbView3d::startMapIniEffects(void)
 			// nieuwe build kost. Leeg of afwezig = alles.
 			ParticleSystem* sys = TheParticleSystemManager->createParticleSystem(tmpl);
 			if (sys == nullptr) continue;
-			sys->setPosition(pObj->getLocation());
+
+			// Emit from the ground, not from the object's stored z.
+			//
+			// Map objects keep whatever z the editor wrote, which for these effect carriers
+			// is 0 - or -40 for the ones in Sakura Forest. The game never sees that: it puts
+			// an object on the terrain when it spawns, through TheTerrainLogic, which is one
+			// of the subsystems a tool does not have. Honouring the stored z instead buries
+			// every ground-aligned effect under the terrain, where no amount of zooming will
+			// find it. A rising effect like DamMist climbs out and looks fine, which is why
+			// this stayed hidden: the effects that worked hid the ones that did not.
+			Coord3D loc = *pObj->getLocation();
+			if (TheTerrainRenderObject != nullptr) {
+				loc.z = TheTerrainRenderObject->getHeightMapHeight(loc.x, loc.y, nullptr);
+			}
+			sys->setPosition(&loc);
+
+			// And face the way the object faces. A bow wake or a drain pipe is directional:
+			// the map author turned the carrier to aim the flow, and dropping that made the
+			// river run the wrong way. setPosition only writes the translation, so rotating
+			// afterwards keeps the position we just set.
+			sys->rotateLocalTransformZ(pObj->getAngle());
 			started++;
 		}
 	}
