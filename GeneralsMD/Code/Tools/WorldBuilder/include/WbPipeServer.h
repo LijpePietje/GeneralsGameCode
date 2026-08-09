@@ -174,6 +174,10 @@ private:
 #define WM_WB_RELOAD_MAP_INI (WM_USER + 208)   // sync: reapply map.ini next to the open map; wParam=bufLen, lParam=buf
 // TheSuperHackers @feature Nemellud 03/08/2026 ShapeFillTool: read one drawn line's points
 #define WM_WB_SF_GET_LINE    (WM_USER + 209)   // sync: line geometry by id; reads g_wbSfGetLineId
+// TheSuperHackers @feature Nemellud 09/08/2026 WorldBuilder: play one particle system so the
+// effect picker can show what a name looks like. A particle effect has no thumbnail - it is
+// motion - so the only honest preview is the effect itself, running in the map.
+#define WM_WB_FX_PREVIEW     (WM_USER + 210)   // sync: play named system; reads g_wbFxPreview
 
 extern int g_wbSfGetLineId;
 
@@ -373,6 +377,13 @@ struct WbPlaceReq {
 struct WbLinkReq {
 	char name1[64];  // first waypoint name
 	char name2[64];  // second waypoint name
+};
+
+// TheSuperHackers @feature Nemellud 09/08/2026 WorldBuilder: effect picker preview.
+// An empty name clears whatever is playing.
+struct WbFxPreviewReq {
+	float wx, wy;     // world coordinates; z is taken from the terrain
+	char  name[64];   // ParticleSystem template name
 };
 
 #endif // WBPIPESERVER_H

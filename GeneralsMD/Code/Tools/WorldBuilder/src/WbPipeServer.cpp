@@ -28,6 +28,7 @@ bool         g_wbPipeCreateApply = false;
 int          g_wbSfGetLineId     = -1;
 WbHeightRect g_wbPipeHeightRect  = {0,0,0,0,0};
 WbPlaceReq      g_wbPlaceReq        = {0};
+WbFxPreviewReq  g_wbFxPreview       = {0};
 WbLinkReq       g_wbLinkReq         = {0};
 float           g_wbRotateAngleDeg  = 0.0f;
 WbPlantTreeReq  g_wbPlantTreeReq    = {0};
@@ -1074,6 +1075,18 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 	}
 
 	// TheSuperHackers @feature Nemellud 07/06/2026 EmbeddedMode: road and bridge placement via pipe
+	// TheSuperHackers @feature Nemellud 09/08/2026 WorldBuilder: effect picker preview
+	if (strcmp(cmd, "fx_preview") == 0) {
+		float fval;
+		g_wbFxPreview = {0};
+		if (JsonGetFloat(json, "wx", &fval)) g_wbFxPreview.wx = fval;
+		if (JsonGetFloat(json, "wy", &fval)) g_wbFxPreview.wy = fval;
+		JsonGetStr(json, "name", g_wbFxPreview.name, sizeof(g_wbFxPreview.name));
+		int ok = (int)SendMessage(hwnd, WM_WB_FX_PREVIEW, 0, 0);
+		_snprintf(responseBuf, responseBufLen, "{\"ok\":%s}", ok ? "true" : "false");
+		return true;
+	}
+
 	if (strcmp(cmd, "place_road") == 0) {
 		char* heap = new char[strlen(json) + 1];
 		strcpy(heap, json);

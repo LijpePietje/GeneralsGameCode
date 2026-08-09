@@ -302,6 +302,9 @@ public:
 	// TheSuperHackers @feature Nemellud 09/08/2026 WorldBuilder: map.ini effect preview
 	static Bool getShowEffects() { return m_showEffects; }
 	static void setShowEffects(Bool s);
+	/// Flip the drawing flag only. setShowEffects() also (re)starts the map's own effects,
+	/// which would wipe a picker preview the moment it was shown.
+	static void setShowEffectsRaw(Bool s) { m_showEffects = s; }
 	/// (Re)start the map.ini effects for the open map. Call after a map load or an edit.
 	static void startMapIniEffects(void);
 

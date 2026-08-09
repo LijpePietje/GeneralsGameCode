@@ -36,6 +36,10 @@
 #include "LayersList.h"
 #include "WHeightMapEdit.h"
 #include "wbview3d.h"
+#include "GameClient/ParticleSys.h"
+#include "W3DDevice/GameClient/BaseHeightMap.h"
+
+extern WbFxPreviewReq g_wbFxPreview;
 #include "WorldBuilder.h"
 #include "WorldBuilderDoc.h"
 #include "WorldBuilderView.h"
@@ -127,6 +131,7 @@ BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
 	ON_MESSAGE(WM_WB_GET_MAP_INFO,    OnWbGetMapInfo)
 	ON_MESSAGE(WM_WB_RELOAD_MAP_INI,  OnWbReloadMapIni)
 	ON_MESSAGE(WM_WB_SF_GET_LINE,     OnWbSfGetLine)
+	ON_MESSAGE(WM_WB_FX_PREVIEW,      OnWbFxPreview)
 	ON_MESSAGE(WM_WB_GET_HEIGHTMAP,   OnWbGetHeightmap)
 	ON_MESSAGE(WM_WB_GET_TEXTUREMAP,  OnWbGetTexturemap)
 	ON_MESSAGE(WM_WB_GET_OBJECTS,     OnWbGetObjects)
@@ -1316,6 +1321,45 @@ LRESULT CMainFrame::OnWbContourGet(WPARAM wParam, LPARAM lParam)
 // TheSuperHackers @feature Nemellud 03/08/2026 ShapeFillTool: return one drawn line's points.
 // Lets a caller use the tool's own line drawing - which WorldBuilder previews live while the
 // user clicks - as the input for something else, instead of collecting clicks itself.
+
+// TheSuperHackers @feature Nemellud 09/08/2026 WorldBuilder: play one particle system.
+//
+// For the effect picker: a particle effect has no thumbnail, so the only honest preview is
+// the thing itself running in the map. Replaces whatever was playing; an empty name just
+// clears. Deliberately separate from startMapIniEffects - this is a scratch preview, not
+// the map's own effects, and the two must not be confused with each other.
+LRESULT CMainFrame::OnWbFxPreview(WPARAM /*wParam*/, LPARAM /*lParam*/)
+{
+	if (TheParticleSystemManager == nullptr) return 0;
+	TheParticleSystemManager->reset();
+
+	if (g_wbFxPreview.name[0] == '\0') {
+		WbView3d::setShowEffects(false);
+		return 1;
+	}
+
+	const ParticleSystemTemplate* tmpl =
+		TheParticleSystemManager->findTemplate(AsciiString(g_wbFxPreview.name));
+	if (tmpl == nullptr) return 0;
+
+	ParticleSystem* sys = TheParticleSystemManager->createParticleSystem(tmpl);
+	if (sys == nullptr) return 0;
+
+	Coord3D pos;
+	pos.x = g_wbFxPreview.wx;
+	pos.y = g_wbFxPreview.wy;
+	pos.z = TheTerrainRenderObject != nullptr
+	      ? TheTerrainRenderObject->getHeightMapHeight(pos.x, pos.y, nullptr) : 0.0f;
+	sys->setPosition(&pos);
+
+	// Drawing is what the picker is for, so switch it on rather than making the caller
+	// remember a second command.
+	WbView3d::setShowEffectsRaw(true);
+	CWorldBuilderDoc* pDoc = CWorldBuilderDoc::GetActiveDoc();
+	if (pDoc) pDoc->updateAllViews();
+	return 1;
+}
+
 LRESULT CMainFrame::OnWbSfGetLine(WPARAM wParam, LPARAM lParam)
 {
 	char* buf = (char*)lParam;
