@@ -369,18 +369,17 @@ void WbView3d::startMapIniEffects(const char* mapPath0)
 			ParticleSystem* sys = TheParticleSystemManager->createParticleSystem(tmpl);
 			if (sys == nullptr) continue;
 
-			// Emit from the ground, not from the object's stored z.
-			//
-			// Map objects keep whatever z the editor wrote, which for these effect carriers
-			// is 0 - or -40 for the ones in Sakura Forest. The game never sees that: it puts
-			// an object on the terrain when it spawns, through TheTerrainLogic, which is one
-			// of the subsystems a tool does not have. Honouring the stored z instead buries
-			// every ground-aligned effect under the terrain, where no amount of zooming will
-			// find it. A rising effect like DamMist climbs out and looks fine, which is why
-			// this stayed hidden: the effects that worked hid the ones that did not.
+			// A map object's stored z is an offset above the ground, not a world height. The
+			// game adds the terrain height to it when it spawns the object
+			// (GameLogic.cpp, "pos.z += TheTerrainLogic->getGroundHeight"), and matching that
+			// exactly is the whole point: authors sink these carriers on purpose - Sakura
+			// Forest's waterfall sits at -40 so its mist wells up out of the river - and an
+			// emitter placed anywhere else shows the map maker something the player will not
+			// see. Taking the stored z as an absolute world height, which is what this did at
+			// first, put every effect on a normal carrier 18 units under the terrain.
 			Coord3D loc = *pObj->getLocation();
 			if (TheTerrainRenderObject != nullptr) {
-				loc.z = TheTerrainRenderObject->getHeightMapHeight(loc.x, loc.y, nullptr);
+				loc.z += TheTerrainRenderObject->getHeightMapHeight(loc.x, loc.y, nullptr);
 			}
 			// And face the way the object faces. A bow wake or a drain pipe is directional:
 			// the map author turned the carrier to aim the flow, and dropping that made the
@@ -433,7 +432,7 @@ void WbView3d::syncMapIniEffects(void)
 
 		Coord3D loc = *pObj->getLocation();
 		if (TheTerrainRenderObject != nullptr) {
-			loc.z = TheTerrainRenderObject->getHeightMapHeight(loc.x, loc.y, nullptr);
+			loc.z += TheTerrainRenderObject->getHeightMapHeight(loc.x, loc.y, nullptr);
 		}
 
 		for (size_t i = 0; i < it->second.size(); i++) {
