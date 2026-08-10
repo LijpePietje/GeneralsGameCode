@@ -98,6 +98,44 @@ std::pair<Int,Int> ShapeFillTool::clampToOuterShape(const ShapeDef& shape, Int t
 	return {tx, ty};
 }
 
+// TheSuperHackers @feature Nemellud 09/08/2026 ShapeFillTool: outline of any shape as vertices.
+//
+// A rectangle is two corners and a circle is a centre and a radius, so neither has anywhere
+// to put a new point - which is why only polygons could be reshaped, not because the other
+// two were meant to be off limits. Adding a vertex to a rectangle makes it stop being a
+// rectangle, so it becomes the polygon it is turning into, starting from the same outline it
+// had a moment before.
+//
+// The circle uses 24 segments rather than the 12 getEffectiveInner uses for its inset: that
+// one is a blend boundary nobody sees directly, this one is the shape you are about to edge
+// and drag, and a 12-gon reads as a mistake.
+std::vector<ShapeVertex> ShapeFillTool::outlineOfShape(const ShapeDef& shape)
+{
+	if (!shape.points.empty()) return shape.points;
+
+	if (shape.type == SHAPE_RECT) {
+		Int minX = std::min(shape.x0, shape.x1), maxX = std::max(shape.x0, shape.x1);
+		Int minY = std::min(shape.y0, shape.y1), maxY = std::max(shape.y0, shape.y1);
+		if (maxX > minX && maxY > minY)
+			return {{minX,minY},{maxX,minY},{maxX,maxY},{minX,maxY}};
+		return {};
+	}
+
+	if (shape.type == SHAPE_CIRCLE && shape.r > 0) {
+		const Int N = 24;
+		const float kPi = 3.14159265f;
+		std::vector<ShapeVertex> pts;
+		pts.reserve(N);
+		for (Int i = 0; i < N; i++) {
+			float angle = 2.0f * kPi * i / N;
+			pts.push_back({shape.cx + (Int)roundf(shape.r * cosf(angle)),
+			               shape.cy + (Int)roundf(shape.r * sinf(angle))});
+		}
+		return pts;
+	}
+	return {};
+}
+
 std::vector<ShapeVertex> ShapeFillTool::getEffectiveInner(const ShapeDef& shape)
 {
 	if (!shape.innerPoints.empty())

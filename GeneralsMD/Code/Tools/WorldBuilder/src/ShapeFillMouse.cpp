@@ -239,6 +239,15 @@ void ShapeFillTool::mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWo
 		if (m_selectedId >= 0) {
 			ShapeDef* shape = findShape(m_selectedId);
 			if (shape) {
+				// A rectangle carries two corners and a circle a radius, so neither had
+				// anywhere to put a new point - that is why only polygons could be reshaped,
+				// not because the other two were meant to be off limits. Adding a vertex to a
+				// rectangle makes it stop being one, so let it become the polygon it is
+				// turning into, starting from the outline it had a moment ago.
+				if (shape->points.empty()) {
+					shape->points = outlineOfShape(*shape);
+					if ((Int)shape->points.size() >= 3) shape->type = SHAPE_POLYGON;
+				}
 				auto findClosestEdge = [&](const std::vector<ShapeVertex>& poly,
 				                          float& bestD, Int& bestSeg, float& bestT) {
 					Int n = (Int)poly.size();
@@ -267,7 +276,11 @@ void ShapeFillTool::mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWo
 					Int newTx = (Int)roundf(shape->points[bestSeg].tx + bestT * (shape->points[j].tx - shape->points[bestSeg].tx));
 					Int newTy = (Int)roundf(shape->points[bestSeg].ty + bestT * (shape->points[j].ty - shape->points[bestSeg].ty));
 					shape->points.insert(shape->points.begin() + j, {newTx, newTy});
-					shape->innerPoints.clear();
+					// An explicit inner ring is never discarded implicitly. Clearing it here threw
+					// away every hand-shaped bank the moment you touched the outer ring - the same
+					// trap setBorderWidth has. Empty innerPoints already means "use the computed
+					// inset", so this was a no-op when nothing had been shaped and destructive
+					// when something had.
 					m_resizingHandle = true;
 					m_activeHandle   = {HDL_POLY_VERTEX, shape->id, j, newTx, newTy};
 					invalidateBothViews();
@@ -459,7 +472,11 @@ void ShapeFillTool::mouseMoved(TTrackingMode m, CPoint viewPt, WbView* pView, CW
 				if (vi >= 0 && vi < (Int)shape->points.size()) {
 					shape->points[vi].tx = tx;
 					shape->points[vi].ty = ty;
-					shape->innerPoints.clear(); // outer vertex moved → reset inner polygon
+					// An explicit inner ring is never discarded implicitly. Clearing it here threw
+					// away every hand-shaped bank the moment you touched the outer ring - the same
+					// trap setBorderWidth has. Empty innerPoints already means "use the computed
+					// inset", so this was a no-op when nothing had been shaped and destructive
+					// when something had.
 				}
 			}
 			else if (m_activeHandle.type == HDL_INNER_VERTEX) {

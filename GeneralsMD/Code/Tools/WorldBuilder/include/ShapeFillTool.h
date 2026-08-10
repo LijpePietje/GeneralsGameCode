@@ -367,6 +367,9 @@ private:
 	static bool  pointInPoly(float px, float py, const std::vector<ShapeVertex>& poly);
 	static std::pair<Int,Int>       clampToOuterShape(const ShapeDef& shape, Int tx, Int ty);
 	static std::vector<ShapeVertex> getEffectiveInner(const ShapeDef& shape);
+	// TheSuperHackers @feature Nemellud 09/08/2026 ShapeFillTool: a rectangle or circle as a
+	// vertex list, so a point can be inserted into one and it becomes an editable polygon.
+	static std::vector<ShapeVertex> outlineOfShape(const ShapeDef& shape);
 	static std::vector<ShapeVertex> insetPolygon(const std::vector<ShapeVertex>& pts, Real amount);
 
 	// ---- Private helpers — coordinate conversion ----
