@@ -59,6 +59,7 @@ extern char g_wbDelObjResult[128];
 #include "TileTool.h"
 #include "FeatherOptions.h"
 #include "ScorchOptions.h"
+#include "ObjectOptions.h"
 #include "MeshMoldOptions.h"
 #include "MeshMoldTool.h"
 #include "Common/FileSystem.h"
@@ -134,6 +135,7 @@ BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
 	ON_MESSAGE(WM_WB_SF_GET_LINE,     OnWbSfGetLine)
 	ON_MESSAGE(WM_WB_FX_PREVIEW,      OnWbFxPreview)
 	ON_MESSAGE(WM_WB_DEL_OBJ_BY_TMPL, OnWbDelObjByTemplate)
+	ON_MESSAGE(WM_WB_SET_PALETTE_OBJ, OnWbSetPaletteObj)
 	ON_MESSAGE(WM_WB_GET_HEIGHTMAP,   OnWbGetHeightmap)
 	ON_MESSAGE(WM_WB_GET_TEXTUREMAP,  OnWbGetTexturemap)
 	ON_MESSAGE(WM_WB_GET_OBJECTS,     OnWbGetObjects)
@@ -3006,6 +3008,26 @@ LRESULT CMainFrame::OnWbDelPlayer(WPARAM, LPARAM lParam)
 // forgot the assignment while the objects stayed put.
 //
 // One DeleteObjectUndoable over the whole selection, so a slip is a single Ctrl+Z.
+// TheSuperHackers @feature Nemellud 09/08/2026 WorldBuilder: set the object palette's
+// selection by name.
+//
+// The fence tool builds its row from whatever the object palette has selected - see
+// FenceOptions::hasSelectedObject, which asks ObjectOptions::getCurGdfName - so a fence
+// cannot be driven from outside without this. Placement over the pipe never needed it,
+// because that names its template per call.
+LRESULT CMainFrame::OnWbSetPaletteObj(WPARAM /*wParam*/, LPARAM lParam)
+{
+	const char* json = (const char*)lParam;
+	char tmpl[128] = "";
+	MF_JsonGetStr(json, "template", tmpl, sizeof(tmpl));
+	if (tmpl[0] == 0) return 0;
+
+	MapObject* pTemplate = ObjectOptions::getObjectNamed(AsciiString(tmpl));
+	if (pTemplate == nullptr) return 0;
+	ObjectOptions::selectObject(pTemplate);
+	return 1;
+}
+
 LRESULT CMainFrame::OnWbDelObjByTemplate(WPARAM wParam, LPARAM lParam)
 {
 	const char* json = (const char*)lParam;

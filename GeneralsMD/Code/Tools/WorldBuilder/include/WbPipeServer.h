@@ -183,6 +183,12 @@ private:
 // the effect panel needs a way to take its emitters back off the map.
 #define WM_WB_DEL_OBJ_BY_TMPL (WM_USER + 211)   // sync: delete all objects of a template
 
+// TheSuperHackers @feature Nemellud 09/08/2026 WorldBuilder: choose the object the fence
+// tool builds from. FenceTool reads its template from the object palette
+// (FenceOptions::hasSelectedObject checks ObjectOptions::getCurGdfName), so driving the
+// tool from outside means being able to set that selection by name.
+#define WM_WB_SET_PALETTE_OBJ (WM_USER + 212)   // sync: select a template in the object palette
+
 extern int g_wbSfGetLineId;
 
 extern char g_wbSavePath[260];

@@ -1099,6 +1099,12 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 		return true;
 	}
 
+	if (strcmp(cmd, "set_palette_object") == 0) {
+		int ok = (int)SendMessage(hwnd, WM_WB_SET_PALETTE_OBJ, 0, (LPARAM)json);
+		_snprintf(responseBuf, responseBufLen, "{\"ok\":%s}", ok ? "true" : "false");
+		return true;
+	}
+
 	if (strcmp(cmd, "delete_objects_by_template") == 0) {
 		SendMessage(hwnd, WM_WB_DEL_OBJ_BY_TMPL, (WPARAM)responseBufLen, (LPARAM)json);
 		strncpy(responseBuf, g_wbDelObjResult, responseBufLen);

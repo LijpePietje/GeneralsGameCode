@@ -196,6 +196,7 @@ protected:
 	afx_msg LRESULT OnWbSfGetLine(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbFxPreview(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbDelObjByTemplate(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbSetPaletteObj(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbGetHeightmap(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbGetTexturemap(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbGetObjects(WPARAM wParam, LPARAM lParam);
