@@ -27,6 +27,7 @@
 ShapeDef     g_wbPipeCreateShape;
 bool         g_wbPipeCreateApply = false;
 int          g_wbSfGetLineId     = -1;
+int          g_wbSfGetShapeId    = -1;
 WbHeightRect g_wbPipeHeightRect  = {0,0,0,0,0};
 WbPlaceReq      g_wbPlaceReq        = {0};
 WbFxPreviewReq  g_wbFxPreview       = {0};
@@ -647,6 +648,13 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 		g_wbSfGetLineId = -1;
 		JsonGetInt(json, "id", &g_wbSfGetLineId);
 		SendMessage(hwnd, WM_WB_SF_GET_LINE, (WPARAM)responseBufLen, (LPARAM)responseBuf);
+		return true;
+	}
+
+	if (strcmp(cmd, "shapefill_get_shape") == 0) {
+		g_wbSfGetShapeId = -1;
+		JsonGetInt(json, "id", &g_wbSfGetShapeId);
+		SendMessage(hwnd, WM_WB_SF_GET_SHAPE, (WPARAM)responseBufLen, (LPARAM)responseBuf);
 		return true;
 	}
 

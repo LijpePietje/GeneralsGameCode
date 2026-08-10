@@ -246,6 +246,10 @@ public:
 	static Bool isPolyDrawing()    { return m_polyDrawing; }
 	static Int  getPolyDraftSize() { return (Int)m_polyDraft.size(); }
 	static const std::vector<ShapeDef>& getShapes() { return m_shapes; }
+	// TheSuperHackers @feature Nemellud 09/08/2026 ShapeFillTool: any shape as a vertex list.
+	// A rectangle is two corners and a circle a centre and a radius, so neither could take an
+	// inserted point, and nothing outside the tool could read back what a user drew.
+	static std::vector<ShapeVertex> outlineOfShape(const ShapeDef& shape);
 	static Bool isActive()         { return m_isActive; }
 
 	// Line tool
@@ -367,9 +371,6 @@ private:
 	static bool  pointInPoly(float px, float py, const std::vector<ShapeVertex>& poly);
 	static std::pair<Int,Int>       clampToOuterShape(const ShapeDef& shape, Int tx, Int ty);
 	static std::vector<ShapeVertex> getEffectiveInner(const ShapeDef& shape);
-	// TheSuperHackers @feature Nemellud 09/08/2026 ShapeFillTool: a rectangle or circle as a
-	// vertex list, so a point can be inserted into one and it becomes an editable polygon.
-	static std::vector<ShapeVertex> outlineOfShape(const ShapeDef& shape);
 	static std::vector<ShapeVertex> insetPolygon(const std::vector<ShapeVertex>& pts, Real amount);
 
 	// ---- Private helpers — coordinate conversion ----

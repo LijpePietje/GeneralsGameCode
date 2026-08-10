@@ -137,6 +137,7 @@ BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
 	ON_MESSAGE(WM_WB_FX_PREVIEW,      OnWbFxPreview)
 	ON_MESSAGE(WM_WB_DEL_OBJ_BY_TMPL, OnWbDelObjByTemplate)
 	ON_MESSAGE(WM_WB_SET_PALETTE_OBJ, OnWbSetPaletteObj)
+	ON_MESSAGE(WM_WB_SF_GET_SHAPE,    OnWbSfGetShape)
 	ON_MESSAGE(WM_WB_GET_HEIGHTMAP,   OnWbGetHeightmap)
 	ON_MESSAGE(WM_WB_GET_TEXTUREMAP,  OnWbGetTexturemap)
 	ON_MESSAGE(WM_WB_GET_OBJECTS,     OnWbGetObjects)
@@ -1377,6 +1378,47 @@ LRESULT CMainFrame::OnWbFxPreview(WPARAM /*wParam*/, LPARAM /*lParam*/)
 	CWorldBuilderDoc* pDoc = CWorldBuilderDoc::GetActiveDoc();
 	if (pDoc) pDoc->updateAllViews();
 	return 1;
+}
+
+// TheSuperHackers @feature Nemellud 09/08/2026 ShapeFillTool: one shape's outline as points.
+//
+// shapefill_get_state reports how many points a shape has, not where they are, so anything
+// built on a shape the user drew had no way to read it back. The lake flow needs exactly
+// that: the shore it dug is where the water goes.
+//
+// Reports the inner ring too when there is one - a hand-shaped inner polygon is the part
+// that cannot be derived from anything else.
+LRESULT CMainFrame::OnWbSfGetShape(WPARAM wParam, LPARAM lParam)
+{
+	char* buf = (char*)lParam;
+	int   len = (int)wParam;
+	if (!buf || len < 64) return 0;
+
+	for (const auto& s : ShapeFillTool::getShapes()) {
+		if (s.id != g_wbSfGetShapeId) continue;
+		auto outline = ShapeFillTool::outlineOfShape(s);
+		int pos = _snprintf(buf, len, "{\"ok\":true,\"id\":%d,\"borderWidth\":%d,\"points\":[",
+		                    s.id, s.borderWidth);
+		bool first = true;
+		for (const auto& p : outline) {
+			if (pos >= len - 40) break;
+			pos += _snprintf(buf + pos, len - pos, "%s{\"x\":%d,\"y\":%d}",
+			                 first ? "" : ",", p.tx, p.ty);
+			first = false;
+		}
+		if (pos < len - 24) pos += _snprintf(buf + pos, len - pos, "],\"innerPoints\":[");
+		first = true;
+		for (const auto& p : s.innerPoints) {
+			if (pos >= len - 40) break;
+			pos += _snprintf(buf + pos, len - pos, "%s{\"x\":%d,\"y\":%d}",
+			                 first ? "" : ",", p.tx, p.ty);
+			first = false;
+		}
+		if (pos < len - 4) { buf[pos++] = ']'; buf[pos++] = '}'; buf[pos] = 0; }
+		return 0;
+	}
+	_snprintf(buf, len, "{\"ok\":false,\"error\":\"no shape with id %d\"}", g_wbSfGetShapeId);
+	return 0;
 }
 
 LRESULT CMainFrame::OnWbSfGetLine(WPARAM wParam, LPARAM lParam)

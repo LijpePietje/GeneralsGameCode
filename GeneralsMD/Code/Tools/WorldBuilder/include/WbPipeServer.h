@@ -189,7 +189,14 @@ private:
 // tool from outside means being able to set that selection by name.
 #define WM_WB_SET_PALETTE_OBJ (WM_USER + 212)   // sync: select a template in the object palette
 
+// TheSuperHackers @feature Nemellud 09/08/2026 ShapeFillTool: read one shape's outline.
+// shapefill_get_state reports a point COUNT per shape, not the points, so anything that
+// needs the geometry a user drew - the lake flow needs its shore to place water along -
+// had no way to get at it. Mirrors shapefill_get_line.
+#define WM_WB_SF_GET_SHAPE   (WM_USER + 213)   // sync: shape outline by id; reads g_wbSfGetShapeId
+
 extern int g_wbSfGetLineId;
+extern int g_wbSfGetShapeId;
 
 extern char g_wbSavePath[260];
 
