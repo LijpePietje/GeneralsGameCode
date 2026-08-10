@@ -225,9 +225,17 @@ void ShapeFillTool::mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWo
 	}
 
 	if (m_mode == SF_EDIT_SHAPE) {
+		// Ctrl says "add a point here", and it has to, because on a dense outline the
+		// two gestures cannot be told apart by position. A carved river's rings sit
+		// about 0.6 tiles apart and never more than 2, while the grab radius for a
+		// handle is 3 - so every point of every edge is inside some handle's reach and
+		// inserting could never win the hit-test. It was not disabled, it was
+		// unreachable, which is worse: the feature looked broken rather than absent.
+		const Bool wantInsert = (0x8000 & ::GetAsyncKeyState(VK_CONTROL)) != 0;
+
 		// Hit-test handles first
 		ShapeHandle handle;
-		if (m_selectedId >= 0 && hitTestHandle(tx, ty, handle)) {
+		if (!wantInsert && m_selectedId >= 0 && hitTestHandle(tx, ty, handle)) {
 			m_resizingHandle = true;
 			m_activeHandle   = handle;
 			m_undoSnapshotBeforeDrag = captureSnapshot();
@@ -261,7 +269,12 @@ void ShapeFillTool::mouseDown(TTrackingMode m, CPoint viewPt, WbView* pView, CWo
 						float t = (len2 > 0) ? std::max(0.0f, std::min(1.0f, (bx*ax+by*ay)/len2)) : 0.0f;
 						float ddx = bx - t*ax, ddy = by - t*ay;
 						float d = sqrtf(ddx*ddx + ddy*ddy);
-						if (d < bestD && t > 0.05f && t < 0.95f) { bestD = d; bestSeg = i; bestT = t; }
+						// The endpoint margin exists so an ordinary click near a corner grabs the
+						// corner instead of splitting the edge beside it. Holding Ctrl already said
+						// which of the two you meant, and on a dense outline the margin leaves no
+						// room at all: segments run 0.6 tiles and clicks arrive on whole tiles.
+						const float lo = wantInsert ? 0.0f : 0.05f, hi = wantInsert ? 1.0f : 0.95f;
+						if (d < bestD && t >= lo && t <= hi) { bestD = d; bestSeg = i; bestT = t; }
 					}
 				};
 
