@@ -60,6 +60,7 @@ extern char g_wbDelObjResult[128];
 #include "FeatherOptions.h"
 #include "ScorchOptions.h"
 #include "ObjectOptions.h"
+#include "FenceOptions.h"
 #include "MeshMoldOptions.h"
 #include "MeshMoldTool.h"
 #include "Common/FileSystem.h"
@@ -3022,10 +3023,18 @@ LRESULT CMainFrame::OnWbSetPaletteObj(WPARAM /*wParam*/, LPARAM lParam)
 	MF_JsonGetStr(json, "template", tmpl, sizeof(tmpl));
 	if (tmpl[0] == 0) return 0;
 
+	// Through FenceOptions, not straight into the palette. Its tree view runs one way -
+	// a selection there sets its own index and then pushes the object to the palette - so
+	// setting the palette alone leaves that index at -1, and FenceTool refuses to build.
+	if (FenceOptions::selectObjectNamed(AsciiString(tmpl))) return 1;
+
+	// Not fence-able, so only the palette selection is possible. Reported as 2 rather than 1
+	// so the caller can tell the difference: the object is selected, but a fence drawn with
+	// it will produce nothing, and saying "ok" flatly would hide that.
 	MapObject* pTemplate = ObjectOptions::getObjectNamed(AsciiString(tmpl));
 	if (pTemplate == nullptr) return 0;
 	ObjectOptions::selectObject(pTemplate);
-	return 1;
+	return 2;
 }
 
 LRESULT CMainFrame::OnWbDelObjByTemplate(WPARAM wParam, LPARAM lParam)

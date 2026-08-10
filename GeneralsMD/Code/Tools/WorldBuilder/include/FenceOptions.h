@@ -86,6 +86,12 @@ protected:
 public:
 	static void update();
 	static Bool hasSelectedObject();
+	// TheSuperHackers @feature Nemellud 09/08/2026 WorldBuilder: pick the fence object by
+	// name, so the tool can be driven from outside the dialog. The tree view is the only
+	// way in otherwise, and it pushes its choice to the object palette rather than reading
+	// from it - setting the palette alone leaves m_currentObjectIndex at -1 and every drag
+	// silently does nothing.
+	static Bool selectObjectNamed(const AsciiString& name);
 	static Real getFenceSpacing() {return m_fenceSpacing;}
 	static Real getFenceOffset() {return m_fenceOffset;}
 };

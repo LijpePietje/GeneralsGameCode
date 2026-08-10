@@ -1100,8 +1100,10 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 	}
 
 	if (strcmp(cmd, "set_palette_object") == 0) {
-		int ok = (int)SendMessage(hwnd, WM_WB_SET_PALETTE_OBJ, 0, (LPARAM)json);
-		_snprintf(responseBuf, responseBufLen, "{\"ok\":%s}", ok ? "true" : "false");
+		// 1 = selected in the fence list (drawable), 2 = palette only, 0 = unknown name.
+		int r = (int)SendMessage(hwnd, WM_WB_SET_PALETTE_OBJ, 0, (LPARAM)json);
+		_snprintf(responseBuf, responseBufLen, "{\"ok\":%s,\"fenceable\":%s}",
+		          r ? "true" : "false", r == 1 ? "true" : "false");
 		return true;
 	}
 

@@ -306,6 +306,29 @@ void FenceOptions::addObject( MapObject *mapObject, const char *pPath, const cha
 
 }
 
+// TheSuperHackers @feature Nemellud 09/08/2026 WorldBuilder: choose the fence object by name.
+//
+// The tree view was the only way to set this, and it runs one way: a selection there sets
+// m_currentObjectIndex and then pushes the object into the palette. Setting the palette from
+// outside therefore looked right - the tool showed its cursor, the object was selected - and
+// still did nothing on every drag, because hasSelectedObject() also wants the index, and that
+// was still -1. So walk the dialog's own list and set the index the same way it does.
+Bool FenceOptions::selectObjectNamed(const AsciiString& name)
+{
+	if (m_staticThis == nullptr) return false;
+
+	Int index = 0;
+	for (MapObject* pObj = m_staticThis->m_objectsList; pObj; pObj = pObj->getNext(), index++) {
+		if (pObj->getName() != name) continue;
+		m_currentObjectIndex = index;
+		m_staticThis->m_customSpacing = false;   // spacing from the object, as a fresh pick does
+		m_staticThis->updateObjectOptions();
+		m_staticThis->setObjectTreeViewSelection(TVI_ROOT, index);   // keep the dialog honest
+		return true;
+	}
+	return false;
+}
+
 Bool FenceOptions::hasSelectedObject()
 {
 	// If we have no selected object, return false.
