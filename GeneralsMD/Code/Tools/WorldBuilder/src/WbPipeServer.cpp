@@ -16,6 +16,7 @@
 #include "WbPipeServer.h"
 #include "ShapeFillTool.h"
 #include "wbview3d.h"
+#include "MainFrm.h"
 #include "GameClient/ParticleSys.h"
 #include "resource.h"
 #include <string.h>
@@ -28,6 +29,7 @@ ShapeDef     g_wbPipeCreateShape;
 bool         g_wbPipeCreateApply = false;
 int          g_wbSfGetLineId     = -1;
 int          g_wbSfGetShapeId    = -1;
+WbOverlayRef g_wbOverlay        = { NULL, 0 };
 WbHeightRect g_wbPipeHeightRect  = {0,0,0,0,0};
 WbPlaceReq      g_wbPlaceReq        = {0};
 WbFxPreviewReq  g_wbFxPreview       = {0};
@@ -219,6 +221,21 @@ static bool JsonGetStr(const char* json, const char* key, char* out, int outLen)
 		out[i] = '\0';
 		return true;
 	}
+	return false;
+}
+
+// Window handles do not fit a float's mantissa without rounding, and a rounded handle is a
+// handle to somebody else's window. Read them as 64-bit integers.
+static bool JsonGetI64(const char* json, const char* key, __int64* out)
+{
+	char search[64];
+	_snprintf(search, sizeof(search), "\"%s\"", key);
+	const char* p = strstr(json, search);
+	if (!p) return false;
+	p += strlen(search);
+	while (*p == ' ' || *p == ':') p++;
+	if (*p == '"') p++;
+	if ((*p >= '0' && *p <= '9') || *p == '-') { *out = _atoi64(p); return true; }
 	return false;
 }
 
@@ -455,6 +472,11 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 	// {"cmd":"status"}
 	if (strcmp(cmd, "status") == 0) {
 		const char* viewMode = s_viewTopDown ? "2d" : "3d";
+		// Whether the two windows are still stacked together, and what got between them
+		// if not. Read here rather than guessed from focus events, which is what made the
+		// old arrangement unfixable.
+		char glueInfo[256] = "";
+		WbDescribeZOrderGlue(glueInfo, sizeof(glueInfo));
 		_snprintf(responseBuf, responseBufLen,
 			// showEffects is reported, not guessed: fx_preview turns the flag on directly, so a
 			// panel that tracks its own idea of it ends up inverted - the user clicks "on" and
@@ -463,11 +485,12 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 			// been one of several unrelated causes - buried objects, an inverted toggle, effects
 			// never restarted - and a live count separates "nothing is running" from "it runs but
 			// is off screen" in one call.
-			"{\"ok\":true,\"ready\":%s,\"viewMode\":\"%s\",\"activeTool\":\"%s\",\"showEffects\":%s,\"particles\":%d}",
+			"{\"ok\":true,\"ready\":%s,\"viewMode\":\"%s\",\"activeTool\":\"%s\",\"showEffects\":%s,\"particles\":%d%s}",
 			hwnd ? "true" : "false", viewMode, s_activeTool,
 			WbView3d::getShowEffects() ? "true" : "false",
 			TheParticleSystemManager != nullptr
-				? (int)TheParticleSystemManager->getParticleCount() : -1);
+				? (int)TheParticleSystemManager->getParticleCount() : -1,
+			glueInfo);
 		return true;
 	}
 
@@ -1104,6 +1127,25 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 		JsonGetStr(json, "name", g_wbFxPreview.name, sizeof(g_wbFxPreview.name));
 		int ok = (int)SendMessage(hwnd, WM_WB_FX_PREVIEW, 0, 0);
 		_snprintf(responseBuf, responseBufLen, "{\"ok\":%s}", ok ? "true" : "false");
+		return true;
+	}
+
+	if (strcmp(cmd, "set_overlay_hwnd") == 0) {
+		// Sent on every pipe connect, not once at startup: the connection already retries, so
+		// a restarted overlay re-arms the glue by itself.
+		__int64 h = 0, p = 0;
+		JsonGetI64(json, "hwnd", &h);
+		JsonGetI64(json, "pid",  &p);
+		g_wbOverlay.hwnd = (HWND)(LONG_PTR)h;
+		g_wbOverlay.pid  = (DWORD)p;
+		int ok = (int)SendMessage(hwnd, WM_WB_SET_OVERLAY, 0, 0);
+		_snprintf(responseBuf, responseBufLen, "{\"ok\":%s}", ok ? "true" : "false");
+		return true;
+	}
+
+	if (strcmp(cmd, "glue_zorder") == 0) {
+		SendMessage(hwnd, WM_WB_GLUE_ZORDER, 0, 0);
+		_snprintf(responseBuf, responseBufLen, "{\"ok\":true}");
 		return true;
 	}
 

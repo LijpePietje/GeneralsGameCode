@@ -83,6 +83,13 @@ extern char g_wbDelObjResult[128];
 
 IMPLEMENT_DYNAMIC(CMainFrame, CFrameWnd)
 
+// The foreground hook that keeps this window glued under the overlay; see
+// OnWbSetOverlay further down. Declared here because OnDestroy unhooks it.
+static HWINEVENTHOOK s_fgHook = NULL;
+// The frame's own handle, kept so the glue works from any thread: AfxGetMainWnd()
+// is per-thread and answers NULL on the pipe thread, where the status verb runs.
+static HWND          s_selfHwnd = NULL;
+
 BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
 	//{{AFX_MSG_MAP(CMainFrame)
 	ON_WM_CREATE()
@@ -138,6 +145,8 @@ BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
 	ON_MESSAGE(WM_WB_DEL_OBJ_BY_TMPL, OnWbDelObjByTemplate)
 	ON_MESSAGE(WM_WB_SET_PALETTE_OBJ, OnWbSetPaletteObj)
 	ON_MESSAGE(WM_WB_SF_GET_SHAPE,    OnWbSfGetShape)
+	ON_MESSAGE(WM_WB_SET_OVERLAY,     OnWbSetOverlay)
+	ON_MESSAGE(WM_WB_GLUE_ZORDER,     OnWbGlueZOrder)
 	ON_MESSAGE(WM_WB_GET_HEIGHTMAP,   OnWbGetHeightmap)
 	ON_MESSAGE(WM_WB_GET_TEXTUREMAP,  OnWbGetTexturemap)
 	ON_MESSAGE(WM_WB_GET_OBJECTS,     OnWbGetObjects)
@@ -683,6 +692,9 @@ void CMainFrame::OnDestroy()
 		KillTimer(m_hAutoSaveTimer);
 	}
 	m_hAutoSaveTimer = 0;
+	// Same thread that installed it, which is guaranteed: OnWbSetOverlay is dispatched
+	// by SendMessage and therefore always runs here.
+	if (s_fgHook != NULL) { ::UnhookWinEvent(s_fgHook); s_fgHook = NULL; }
 	CFrameWnd::OnDestroy();
 }
 
@@ -1388,6 +1400,137 @@ LRESULT CMainFrame::OnWbFxPreview(WPARAM /*wParam*/, LPARAM /*lParam*/)
 //
 // Reports the inner ring too when there is one - a hand-shaped inner polygon is the part
 // that cannot be derived from anything else.
+// TheSuperHackers @feature Nemellud 09/08/2026 EmbeddedMode: keep the editor's two windows
+// glued in z-order.
+//
+// The editor looks like one window and is two: a transparent overlay carrying the panels, and
+// this one underneath carrying the map. Nothing in Windows links them, so a third application
+// could end up between - panels above a browser, map below it.
+//
+// The overlay used to repair that from its own focus and blur events. Those only fire on a
+// transition, so anything that came forward while the overlay was already blurred slipped in
+// and stayed. Watching foreground changes catches every case, including the ones that never
+// touch our own windows.
+//
+// Deliberately NOT topmost. SetWindowPos with an insert-after of the overlay is monotone: it
+// can only place this window one below the overlay, never above it and never at the top, so
+// whatever the user brings forward stays in front of both. That is the difference from the
+// alwaysOnTop experiment that had to be reverted.
+
+/** The overlay, if it is still the window we were told about and still worth stacking under. */
+static HWND usableOverlay(void)
+{
+	HWND o = g_wbOverlay.hwnd;
+	if (o == NULL) return NULL;
+	if (!::IsWindow(o)) { g_wbOverlay.hwnd = NULL; return NULL; }
+
+	// Handles get recycled and IsWindow() is happy to confirm a recycled one, so without this
+	// a restarted overlay could park us under an unrelated application's window.
+	DWORD pid = 0;
+	::GetWindowThreadProcessId(o, &pid);
+	if (g_wbOverlay.pid != 0 && pid != g_wbOverlay.pid) { g_wbOverlay.hwnd = NULL; return NULL; }
+
+	if (!::IsWindowVisible(o) || ::IsIconic(o)) return NULL;
+	return o;
+}
+
+/** Put this window immediately below the overlay, wherever the pair currently sits. */
+static void glueBelowOverlay(HWND self)
+{
+	HWND o = usableOverlay();
+	if (o == NULL || self == NULL || !::IsWindowVisible(self)) return;
+
+	// No SWP_SHOWWINDOW: while the overlay is minimised this window is deliberately hidden,
+	// and showing it here would put the map back on screen with nothing to control it.
+	::SetWindowPos(self, o, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+}
+
+/** True when the first visible window below the overlay is this one. */
+static BOOL isGlued(HWND self, HWND overlay, HWND* gap)
+{
+	if (gap) *gap = NULL;
+	if (overlay == NULL || self == NULL) return FALSE;
+	HWND next = ::GetWindow(overlay, GW_HWNDNEXT);
+	while (next != NULL && !::IsWindowVisible(next)) next = ::GetWindow(next, GW_HWNDNEXT);
+	if (next == self) return TRUE;
+	if (gap) *gap = next;
+	return FALSE;
+}
+
+static void CALLBACK foregroundChanged(HWINEVENTHOOK, DWORD, HWND, LONG, LONG, DWORD, DWORD)
+{
+	glueBelowOverlay(s_selfHwnd);
+}
+
+LRESULT CMainFrame::OnWbSetOverlay(WPARAM, LPARAM)
+{
+	// Installed from here rather than from the pipe thread: an out-of-context hook belongs to
+	// the thread that installs it and its events arrive through that thread's message pump.
+	// The pipe thread sits blocked in ConnectNamedPipe and never pumps.
+	if (s_fgHook == NULL) {
+		s_fgHook = ::SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
+		                             NULL, foregroundChanged, 0, 0,
+		                             WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+	}
+	s_selfHwnd = GetSafeHwnd();
+	glueBelowOverlay(s_selfHwnd);
+	return s_fgHook != NULL ? 1 : 0;
+}
+
+/**
+ * Describe the stacking for the status report.
+ *
+ * Turns "it feels wrong" into "MozillaWindowClass is between them", which is the difference
+ * between a bug report and a guess.
+ */
+void WbDescribeZOrderGlue(char* out, int outLen)
+{
+	HWND o = g_wbOverlay.hwnd;
+	if (out == NULL || outLen < 64) return;
+	if (o == NULL || !::IsWindow(o)) {
+		_snprintf(out, outLen, ",\"overlayHwnd\":0,\"overlayGlued\":false,\"zGap\":null");
+		return;
+	}
+	HWND gap = NULL;
+	BOOL glued = isGlued(s_selfHwnd, o, &gap);
+	if (glued || gap == NULL) {
+		_snprintf(out, outLen, ",\"overlayHwnd\":%I64d,\"overlayGlued\":%s,\"zGap\":null",
+		          (__int64)(LONG_PTR)o, glued ? "true" : "false");
+		return;
+	}
+	char cls[64] = "", title[96] = "";
+	::GetClassName(gap, cls, sizeof(cls) - 1);
+	::GetWindowText(gap, title, sizeof(title) - 1);
+	// A quote or a backslash in a window title would break the JSON this ends up in.
+	for (char* q = title; *q; q++) if (*q == 34 || *q == 92) *q = 32;
+	_snprintf(out, outLen, ",\"overlayHwnd\":%I64d,\"overlayGlued\":false,\"zGap\":\"%s: %s\"",
+	          (__int64)(LONG_PTR)o, cls, title);
+}
+
+LRESULT CMainFrame::OnWbGlueZOrder(WPARAM, LPARAM)
+{
+	glueBelowOverlay(GetSafeHwnd());
+	return 1;
+}
+
+/**
+ * Called from the 3D view's existing 10 Hz tick.
+ *
+ * The hook covers foreground changes, which is the fast path, but its events only arrive when
+ * this thread pumps messages - and a terrain Apply or a map resize runs to completion inside a
+ * SendMessage handler without pumping at all. Two GetWindow calls per tick close that gap and
+ * cost nothing.
+ */
+void CMainFrame::checkZOrderGlue(void)
+{
+	if (s_fgHook == NULL) return;
+	HWND o = usableOverlay();
+	if (o == NULL) return;
+	HWND self = GetSafeHwnd();
+	if (self == NULL || !::IsWindowVisible(self)) return;
+	if (!isGlued(self, o, NULL)) glueBelowOverlay(self);
+}
+
 LRESULT CMainFrame::OnWbSfGetShape(WPARAM wParam, LPARAM lParam)
 {
 	char* buf = (char*)lParam;

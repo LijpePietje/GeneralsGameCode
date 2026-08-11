@@ -3230,6 +3230,16 @@ Real WbView3d::getCurrentZoom()
 // ----------------------------------------------------------------------------
 void WbView3d::OnTimer(UINT nIDEvent)
 {
+	// The z-order glue rides along on this tick. The foreground hook that normally keeps
+	// the map under its panels only delivers when this thread pumps messages, and a
+	// terrain Apply or a map resize runs to completion without pumping at all - so
+	// something can slide between the two windows and stay there. Two GetWindow calls
+	// ten times a second close that gap.
+	{
+		CMainFrame* pFrame = (CMainFrame*)AfxGetMainWnd();
+		if (pFrame != NULL) pFrame->checkZOrderGlue();
+	}
+
 	if (getLastDrawTime()+UPDATE_TIME<::GetTickCount())
 	{
 		Invalidate(false);

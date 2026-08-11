@@ -195,6 +195,23 @@ private:
 // had no way to get at it. Mirrors shapefill_get_line.
 #define WM_WB_SF_GET_SHAPE   (WM_USER + 213)   // sync: shape outline by id; reads g_wbSfGetShapeId
 
+// TheSuperHackers @feature Nemellud 09/08/2026 EmbeddedMode: keep the pair glued in z-order.
+//
+// The editor is two unrelated top-level windows, so a third application can end up between
+// them - panels above a browser, map below it. Electron used to repair that from its own
+// focus/blur events, which only fire on a transition: anything that comes forward while
+// Electron is already blurred slips in and stays. WorldBuilder watches for it instead.
+#define WM_WB_SET_OVERLAY    (WM_USER + 214)   // sync: learn the overlay window; reads g_wbOverlay
+#define WM_WB_GLUE_ZORDER    (WM_USER + 215)   // sync: re-assert the stacking right now
+
+// The PID is not decoration: window handles are recycled, and IsWindow() on a recycled one
+// answers true, which would glue WorldBuilder underneath a stranger's window.
+struct WbOverlayRef {
+	HWND  hwnd;
+	DWORD pid;
+};
+extern WbOverlayRef g_wbOverlay;
+
 extern int g_wbSfGetLineId;
 extern int g_wbSfGetShapeId;
 

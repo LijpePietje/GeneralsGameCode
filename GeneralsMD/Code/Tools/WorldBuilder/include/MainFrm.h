@@ -198,6 +198,13 @@ protected:
 	afx_msg LRESULT OnWbDelObjByTemplate(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbSetPaletteObj(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbSfGetShape(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbSetOverlay(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbGlueZOrder(WPARAM wParam, LPARAM lParam);
+public:
+	/// Re-assert the z-order glue; called from the 3D view's 10 Hz tick.
+	void checkZOrderGlue(void);
+
+protected:
 	afx_msg LRESULT OnWbGetHeightmap(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbGetTexturemap(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbGetObjects(WPARAM wParam, LPARAM lParam);
@@ -260,3 +267,7 @@ protected:
 
 //{{AFX_INSERT_LOCATION}}
 // Microsoft Visual C++ will insert additional declarations immediately before the previous line.
+
+// Append the z-order fields to a status reply. Free function on purpose: the status verb
+// runs on the pipe thread, where AfxGetMainWnd() answers NULL.
+void WbDescribeZOrderGlue(char* out, int outLen);
