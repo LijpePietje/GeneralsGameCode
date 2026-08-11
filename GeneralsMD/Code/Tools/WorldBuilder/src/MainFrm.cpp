@@ -2289,13 +2289,17 @@ LRESULT CMainFrame::OnWbPlaceObject(WPARAM, LPARAM)
 	CWorldBuilderDoc* pDoc = (CWorldBuilderDoc*)GetActiveDocument();
 	if (!pDoc || !g_wbPlaceReq.name[0]) return 0;
 	const WbPlaceReq& r = g_wbPlaceReq;
-	// Sit on the terrain, not at sea level. z = 0 buries an object wherever the ground is
-	// higher, which is nearly everywhere - a flat snow map already sits at 12.5. The marker
-	// still drew on the surface, so nothing looked wrong until an emitter placed this way
-	// emitted its particles underground and showed nothing at all.
-	const Real groundZ = (TheTerrainRenderObject != nullptr)
-	                   ? TheTerrainRenderObject->getHeightMapHeight(r.wx, r.wy, nullptr) : 0.0f;
-	Coord3D loc = { r.wx, r.wy, groundZ };
+	// A map object's z is an OFFSET above the ground, not a height above sea level. Both the
+	// editor and the game add the terrain height to it - wbview3d.cpp when it positions the
+	// render object, GameLogic.cpp when it spawns one ("pos.z += getGroundHeight") - so 0 is
+	// what "standing on the ground" means, and it is what every other placement here and
+	// every hand-placed object in the shipped maps uses.
+	//
+	// This used to write the terrain height, which then got added a second time and left
+	// objects hovering one ground-height above the map. The reasoning was that z = 0 buried
+	// particle emitters; the real cause of that was startMapIniEffects reading the stored z
+	// as an absolute, and that is fixed where it belongs.
+	Coord3D loc = { r.wx, r.wy, 0.0f };
 	AsciiString templateName(r.name);
 	const ThingTemplate* tt = TheThingFactory->findTemplate(templateName);
 	MapObject* pNew = newInstance(MapObject)(loc, templateName, r.angle * (3.14159265f / 180.0f), 0, nullptr, tt);
