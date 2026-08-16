@@ -1468,6 +1468,13 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 		return true;
 	}
 
+	// TheSuperHackers @feature Nemellud 16/08/2026 EmbeddedMode: remove a script group
+	if (strcmp(cmd, "sidelist_group_del") == 0) {
+		strncpy(responseBuf, json, responseBufLen - 1); responseBuf[responseBufLen - 1] = '\0';
+		SendMessage(hwnd, WM_WB_DEL_GROUP, (WPARAM)responseBufLen, (LPARAM)responseBuf);
+		return true;
+	}
+
 	if (strcmp(cmd, "sidelist_add_skirmish") == 0) {
 		SendMessage(hwnd, WM_WB_ADD_SKIRMISH, (WPARAM)responseBufLen, (LPARAM)responseBuf);
 		return true;

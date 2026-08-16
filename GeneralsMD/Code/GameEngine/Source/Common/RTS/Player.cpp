@@ -301,6 +301,7 @@ Player::Player( Int playerIndex )
 	m_isPlayerDead = FALSE;
 
 	m_playerIndex = playerIndex;
+	m_supplyIncomeTotal = 0;
 
 	// allocate new relation map pools
 	m_playerRelations = newInstance(PlayerRelationMap);
@@ -374,6 +375,9 @@ void Player::init(const PlayerTemplate* pt)
 
 	m_energy.init(this);
 	m_stats.init();
+
+	// TheSuperHackers @feature Nemellud 14/08/2026 Reset the supply-harvest diagnostic counter.
+	m_supplyIncomeTotal = 0;
 
 	deleteInstance(m_pBuildList);
 	m_pBuildList = nullptr;

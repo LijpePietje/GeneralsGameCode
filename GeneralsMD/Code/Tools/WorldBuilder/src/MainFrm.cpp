@@ -199,6 +199,7 @@ BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
 	ON_MESSAGE(WM_WB_SET_LIGHTING,     OnWbSetLighting)
 	ON_MESSAGE(WM_WB_RESET_LIGHTING,   OnWbResetLighting)
 	ON_MESSAGE(WM_WB_IMPASSABLE_VIEW,  OnWbImpassableView)
+	ON_MESSAGE(WM_WB_DEL_GROUP,        OnWbDelGroup)
 END_MESSAGE_MAP()
 
 static UINT indicators[] =
@@ -1816,11 +1817,26 @@ LRESULT CMainFrame::OnWbGetWaypoints(WPARAM wParam, LPARAM lParam)
 		if (ppos < (int)sizeof(pathsBuf) - 1) pathsBuf[ppos++] = ']';
 		pathsBuf[ppos] = '\0';
 		pos += _snprintf(buf + pos, maxLen - pos,
-			"%s{\"name\":\"%s\",\"wx\":%.1f,\"wy\":%.1f,\"paths\":%s,\"biDir\":%s}",
-			first ? "" : ",", name,
+			"%s{\"name\":\"%s\",\"id\":%d,\"wx\":%.1f,\"wy\":%.1f,\"paths\":%s,\"biDir\":%s}",
+			first ? "" : ",", name, (int)pObj->getWaypointID(),
 			loc ? loc->x : 0.0f, loc ? loc->y : 0.0f,
 			pathsBuf, biDir ? "true" : "false");
 		first = false;
+	}
+	// TheSuperHackers @feature Nemellud 16/08/2026 EmbeddedMode: report the links too. The chain
+	// of links IS the route — it is what a train follows (RailroadGuideAIUpdate walks getLink(0))
+	// — but a caller could only see path labels, so it had to infer node order from the
+	// "<path>_<n>" naming and guess whether a route closed into a loop by measuring the distance
+	// between its two ends. Both guesses disappear once the links themselves are readable.
+	if (pos < maxLen - 32) pos += _snprintf(buf + pos, maxLen - pos, "],\"links\":[");
+	bool firstLink = true;
+	for (Int li = 0; li < pDoc->getNumWaypointLinks(); li++) {
+		if (pos >= maxLen - 64) break;
+		Int id1 = 0, id2 = 0;
+		pDoc->getWaypointLink(li, &id1, &id2);
+		pos += _snprintf(buf + pos, maxLen - pos, "%s[%d,%d]", firstLink ? "" : ",",
+		                 (int)id1, (int)id2);
+		firstLink = false;
 	}
 	if (pos < maxLen - 2) { buf[pos++] = ']'; buf[pos++] = '}'; buf[pos] = '\0'; }
 	return 0;
@@ -2979,6 +2995,19 @@ static void MF_SetParam(Parameter* p, const char* valStr)
 		case Parameter::PERCENT:
 			p->friend_setReal((float)atof(valStr));
 			break;
+		// TheSuperHackers @bugfix Nemellud 15/08/2026 A positional parameter fell through to
+		// friend_setString, so its coordinate stayed (0,0,0) and every script action carrying
+		// a position landed on the map origin - measured with CREATE_OBJECT, which put three
+		// parachutes at 0,0,0 instead of over the drop point. Accepts "x y z", and also
+		// "x,y,z" since that is what a reader would expect to be allowed.
+		case Parameter::COORD3D:
+		{
+			Coord3D loc;
+			loc.x = loc.y = loc.z = 0.0f;
+			if (sscanf(valStr, "%f%*[ ,]%f%*[ ,]%f", &loc.x, &loc.y, &loc.z) >= 2)
+				p->friend_setCoord3D(&loc);
+			break;
+		}
 		default:
 			p->friend_setString(AsciiString(valStr));
 			break;
@@ -3407,14 +3436,31 @@ LRESULT CMainFrame::OnWbSelectObject(WPARAM, LPARAM lParam)
 	delete[] json;
 	if (!name[0]) return 0;
 
+	// TheSuperHackers @bugfix Nemellud 16/08/2026 EmbeddedMode: match the object's own name, not
+	// only its template. getName() is the template type, so selecting "MyRefinery" never matched
+	// anything: every object was deselected, nothing was selected, and a caller that followed up
+	// with a delete quietly removed nothing at all. Scripts address an object by its objectName,
+	// so that is the name a caller has in hand. The template match stays as a fallback for
+	// callers that pass one, and objectName wins when both could match.
 	MapObject* target = nullptr;
+	MapObject* byTemplate = nullptr;
 	for (MapObject* p = MapObject::getFirstMapObject(); p; p = p->getNext()) {
 		p->setSelected(FALSE);
-		if (!target) {
-			if (p->isWaypoint() && strcmp(p->getWaypointName().str(), name) == 0) target = p;
-			else if (!p->isWaypoint() && strcmp(p->getName().str(), name) == 0) target = p;
+		if (p->isWaypoint()) {
+			if (!target && strcmp(p->getWaypointName().str(), name) == 0) target = p;
+			continue;
 		}
+		if (!target) {
+			Dict* d = p->getProperties();
+			if (d) {
+				Bool exists = FALSE;
+				AsciiString on = d->getAsciiString(TheKey_objectName, &exists);
+				if (exists && on.getLength() > 0 && strcmp(on.str(), name) == 0) target = p;
+			}
+		}
+		if (!byTemplate && strcmp(p->getName().str(), name) == 0) byTemplate = p;
 	}
+	if (!target) target = byTemplate;
 	if (target) target->setSelected(TRUE);
 
 	CWorldBuilderDoc* pDoc = (CWorldBuilderDoc*)GetActiveDocument();
@@ -3777,6 +3823,48 @@ LRESULT CMainFrame::OnWbDelScript(WPARAM wParam, LPARAM lParam)
 		if (ok) MF_CommitSidesUndoable(newSides);
 	}
 	if (bufLen > 0) _snprintf(buf, bufLen, "{\"ok\":%s}", ok ? "true" : "false");
+	return 0;
+}
+
+// TheSuperHackers @feature Nemellud 16/08/2026 EmbeddedMode: delete a script group. A group
+// could be created and renamed but never removed, so a folder made by mistake was permanent.
+// ScriptList::deleteGroup frees the group with the scripts still hanging off it, which is what
+// the editor's own tree does when you delete a folder, so the caller is told how many went with
+// it rather than being asked to empty the group first.
+LRESULT CMainFrame::OnWbDelGroup(WPARAM wParam, LPARAM lParam)
+{
+	char* buf    = (char*)lParam;
+	int   bufLen = (int)wParam;
+	bool  ok     = false;
+	int   killed = 0;
+
+	if (TheSidesList && buf) {
+		char playerName[64] = "", groupName[128] = "";
+		MF_JsonGetStr(buf, "player", playerName, sizeof(playerName));
+		MF_JsonGetStr(buf, "name",   groupName,  sizeof(groupName));
+
+		SidesList newSides;
+		newSides = *TheSidesList;
+		SidesInfo* side = newSides.findSideInfo(AsciiString(playerName));
+		if (!side) {
+			int n = newSides.getNumSides();
+			for (int i = 0; i < n; i++) { SidesInfo* s = newSides.getSideInfo(i); if (s) { side = s; break; } }
+		}
+		if (side) {
+			ScriptList* sl = side->getScriptList();
+			if (sl) {
+				for (ScriptGroup* g = sl->getScriptGroup(); g; g = g->getNext()) {
+					if (strcmp(g->getName().str(), groupName) != 0) continue;
+					for (Script* s = g->getScript(); s; s = s->getNext()) killed++;
+					sl->deleteGroup(g);
+					ok = true;
+					break;
+				}
+			}
+		}
+		if (ok) MF_CommitSidesUndoable(newSides);
+	}
+	if (bufLen > 0) _snprintf(buf, bufLen, "{\"ok\":%s,\"scriptsDeleted\":%d}", ok ? "true" : "false", killed);
 	return 0;
 }
 

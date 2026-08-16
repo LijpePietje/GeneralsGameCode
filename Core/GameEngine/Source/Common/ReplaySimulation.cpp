@@ -23,7 +23,9 @@
 #include "Common/GameEngine.h"
 #include "Common/LocalFileSystem.h"
 #include "Common/Player.h"
+#include "Common/PlayerList.h"
 #include "Common/Recorder.h"
+#include "Common/ScoreKeeper.h"
 #include "Common/ThingTemplate.h"
 #include "Common/WorkerProcess.h"
 #include "GameLogic/GameLogic.h"
@@ -57,6 +59,29 @@ void dumpObjectState(FILE *f, const AsciiString &replayName)
 			replayName.str(), frame, (unsigned int)obj->getID(),
 			obj->getTemplate() ? obj->getTemplate()->getName().str() : "",
 			pos->x, pos->y, pos->z, health, playerIndex);
+	}
+}
+
+// TheSuperHackers @feature Nemellud 14/08/2026 Dump each player's economy every
+// DUMP_FRAME_INTERVAL frames, alongside the object dump. supply_income counts only money
+// delivered to supply centers, so the harvesting rate can be measured without crates,
+// Black Market or Supply Drop Zone income mixed in (total_earned has all of it).
+void dumpPlayerState(FILE *f, const AsciiString &replayName)
+{
+	if (!f || !ThePlayerList)
+		return;
+	UnsignedInt frame = TheGameLogic->getFrame();
+	for (Int i = 0; i < ThePlayerList->getPlayerCount(); ++i)
+	{
+		Player *player = ThePlayerList->getNthPlayer(i);
+		if (!player)
+			continue;
+		fprintf(f, "%s,%u,%d,%s,%d,%d,%u\n",
+			replayName.str(), frame, player->getPlayerIndex(),
+			player->getSide().str(),
+			player->getMoney() ? (Int)player->getMoney()->countMoney() : 0,
+			player->getScoreKeeper()->getTotalMoneyEarned(),
+			player->getSupplyIncomeTotal());
 	}
 }
 } // namespace
@@ -111,6 +136,7 @@ int ReplaySimulation::simulateReplaysInThisProcess(const std::vector<AsciiString
 	DWORD totalStartTimeMillis = GetTickCount();
 
 	FILE *dumpFile = nullptr;
+	FILE *playerDumpFile = nullptr;
 	if (!TheGlobalData->m_dumpObjectStatePath.isEmpty())
 	{
 		dumpFile = fopen(TheGlobalData->m_dumpObjectStatePath.str(), "w");
@@ -118,6 +144,14 @@ int ReplaySimulation::simulateReplaysInThisProcess(const std::vector<AsciiString
 			fprintf(dumpFile, "replay,frame,object_id,template,x,y,z,health,player_index\n");
 		else
 			printf("Kon dump-bestand niet openen: %s\n", TheGlobalData->m_dumpObjectStatePath.str());
+
+		AsciiString playerDumpPath = TheGlobalData->m_dumpObjectStatePath;
+		playerDumpPath.concat(".players.csv");
+		playerDumpFile = fopen(playerDumpPath.str(), "w");
+		if (playerDumpFile)
+			fprintf(playerDumpFile, "replay,frame,player_index,side,money,total_earned,supply_income\n");
+		else
+			printf("Kon spelerdump-bestand niet openen: %s\n", playerDumpPath.str());
 	}
 
 	for (size_t i = 0; i < filenames.size(); i++)
@@ -144,8 +178,13 @@ int ReplaySimulation::simulateReplaysInThisProcess(const std::vector<AsciiString
 					fflush(stdout);
 				}
 				TheGameLogic->UPDATE();
-				if (dumpFile && TheGameLogic->getFrame() % DUMP_FRAME_INTERVAL == 0)
-					dumpObjectState(dumpFile, filename);
+				if (TheGameLogic->getFrame() % DUMP_FRAME_INTERVAL == 0)
+				{
+					if (dumpFile)
+						dumpObjectState(dumpFile, filename);
+					if (playerDumpFile)
+						dumpPlayerState(playerDumpFile, filename);
+				}
 				if (TheRecorder->sawCRCMismatch())
 				{
 					numErrors++;
@@ -183,6 +222,8 @@ int ReplaySimulation::simulateReplaysInThisProcess(const std::vector<AsciiString
 
 	if (dumpFile)
 		fclose(dumpFile);
+	if (playerDumpFile)
+		fclose(playerDumpFile);
 
 	return numErrors != 0 ? 1 : 0;
 }

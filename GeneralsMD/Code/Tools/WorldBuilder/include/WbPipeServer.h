@@ -204,6 +204,10 @@ private:
 #define WM_WB_SET_OVERLAY    (WM_USER + 214)   // sync: learn the overlay window; reads g_wbOverlay
 #define WM_WB_GLUE_ZORDER    (WM_USER + 215)   // sync: re-assert the stacking right now
 
+// TheSuperHackers @feature Nemellud 16/08/2026 EmbeddedMode: a script group could be created
+// and renamed but never removed, so a folder made by mistake stayed in the map for good.
+#define WM_WB_DEL_GROUP      (WM_USER + 216)   // sync: delete a script group and its scripts
+
 // The PID is not decoration: window handles are recycled, and IsWindow() on a recycled one
 // answers true, which would glue WorldBuilder underneath a stranger's window.
 struct WbOverlayRef {

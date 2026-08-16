@@ -236,6 +236,7 @@ protected:
 	afx_msg LRESULT OnWbSetScript(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbDelScript(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbSetGroup(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbDelGroup(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbAddSkirmish(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbAddPlayer(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbDelPlayer(WPARAM wParam, LPARAM lParam);

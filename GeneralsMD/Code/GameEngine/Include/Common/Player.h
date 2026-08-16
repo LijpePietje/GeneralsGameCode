@@ -238,6 +238,13 @@ public:
 
 	UnsignedInt getSupplyBoxValue();///< Many things can affect the value of a crate, but at heart it is a GlobalData ratio.
 
+	// TheSuperHackers @feature Nemellud 14/08/2026 Money harvested from supply warehouses only,
+	// tracked apart from ScoreKeeper's total earned (which also counts crates, Black Market and
+	// Supply Drop Zone income). Used by -dumpObjectState to measure the actual gathering rate.
+	// Diagnostic accumulator: deliberately not part of crc()/xfer(), so it cannot affect replays.
+	UnsignedInt getSupplyIncomeTotal() const { return m_supplyIncomeTotal; }
+	void addSupplyIncome( UnsignedInt amount ) { m_supplyIncomeTotal += amount; }
+
 	Energy *getEnergy() { return &m_energy; }
 	const Energy *getEnergy() const { return &m_energy; }
 
@@ -749,6 +756,7 @@ private:
 	AsciiString									m_baseSide;											///< the base side, GLA, USA, or China
 	PlayerType									m_playerType;									///< human/computer control
 	Money												m_money;											///< Player's current wealth
+	UnsignedInt									m_supplyIncomeTotal;					///< Money harvested from supply warehouses (diagnostic, see addSupplyIncome)
 	Upgrade*										m_upgradeList;								///< list of all upgrades this player has
 	Int													m_radarCount;									///< # of facilities that have a radar under the players control
 	Int													m_disableProofRadarCount;			///< # of disable proof radars.  A disable proof one will be in both refcounts

@@ -99,6 +99,9 @@ Bool SupplyCenterDockUpdate::action( Object* docker, Object *drone )
 		Money *ownerPlayerMoney = ownerPlayer->getMoney();
 		ownerPlayerMoney->deposit(value);
 		ownerPlayer->getScoreKeeper()->addMoneyEarned(value);
+		// TheSuperHackers @feature Nemellud 14/08/2026 Also book this on the supply-only
+		// counter, so harvesting income can be measured apart from other income sources.
+		ownerPlayer->addSupplyIncome(value);
 
 		// Setup info for adding a floating text
 		Coord3D pos;
