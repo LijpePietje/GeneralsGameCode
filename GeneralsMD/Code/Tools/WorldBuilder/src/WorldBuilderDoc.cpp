@@ -1293,6 +1293,12 @@ BOOL CWorldBuilderDoc::OnNewDocument()
 	// whatever the previously opened map installed.
 	applyMapIni(nullptr);
 
+	// TheSuperHackers @bugfix Nemellud 16/08/2026 EmbeddedMode: and it has no session either.
+	// Blobs are only cleared when a session file is read, so without this the previous map's
+	// editor state — which wizards were built — stayed in memory and was written into the new
+	// map's sidecar the first time anything saved.
+	ShapeFillTool::clearBlobs();
+
 	TNewHeightInfo hi;
 	hi.initialHeight = AfxGetApp()->GetProfileInt("GameOptions", "Default Map Height", 16);
 	hi.xExtent = AfxGetApp()->GetProfileInt("GameOptions", "Default Map X-size", 100);

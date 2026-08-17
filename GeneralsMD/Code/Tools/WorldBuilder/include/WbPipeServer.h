@@ -208,6 +208,13 @@ private:
 // and renamed but never removed, so a folder made by mistake stayed in the map for good.
 #define WM_WB_DEL_GROUP      (WM_USER + 216)   // sync: delete a script group and its scripts
 
+// TheSuperHackers @feature Nemellud 16/08/2026 EmbeddedMode: editor state that cannot live in the
+// .map — drawn shapes, which wizards were run — shares one sidecar with one writer. WorldBuilder
+// owns .wbsession; everyone else hands over an opaque payload under a key and gets it back
+// unchanged. Two processes rewriting one file is how half of it goes missing.
+#define WM_WB_GET_BLOB       (WM_USER + 217)   // sync: read a named blob from the session file
+#define WM_WB_SET_BLOB       (WM_USER + 218)   // sync: store a named blob and save the sidecar
+
 // The PID is not decoration: window handles are recycled, and IsWindow() on a recycled one
 // answers true, which would glue WorldBuilder underneath a stranger's window.
 struct WbOverlayRef {

@@ -200,6 +200,8 @@ BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
 	ON_MESSAGE(WM_WB_RESET_LIGHTING,   OnWbResetLighting)
 	ON_MESSAGE(WM_WB_IMPASSABLE_VIEW,  OnWbImpassableView)
 	ON_MESSAGE(WM_WB_DEL_GROUP,        OnWbDelGroup)
+	ON_MESSAGE(WM_WB_GET_BLOB,         OnWbGetBlob)
+	ON_MESSAGE(WM_WB_SET_BLOB,         OnWbSetBlob)
 END_MESSAGE_MAP()
 
 static UINT indicators[] =
@@ -3831,6 +3833,60 @@ LRESULT CMainFrame::OnWbDelScript(WPARAM wParam, LPARAM lParam)
 // ScriptList::deleteGroup frees the group with the scripts still hanging off it, which is what
 // the editor's own tree does when you delete a folder, so the caller is told how many went with
 // it rather than being asked to empty the group first.
+// TheSuperHackers @feature Nemellud 16/08/2026 EmbeddedMode: read/write a named session blob.
+// Editor state that the .map cannot hold lives in the .wbsession sidecar, and WorldBuilder is its
+// only writer — the Electron side hands over an opaque payload rather than opening the file, so
+// the two can never overwrite each other's half.
+LRESULT CMainFrame::OnWbGetBlob(WPARAM wParam, LPARAM lParam)
+{
+	char* buf    = (char*)lParam;
+	int   bufLen = (int)wParam;
+	if (!buf || bufLen < 64) return 0;
+
+	char key[64] = "";
+	MF_JsonGetStr(buf, "key", key, sizeof(key));
+	CString val = ShapeFillTool::getBlob(CString(key));
+
+	// The payload is JSON that was escaped into one line by the caller; hand it back untouched.
+	int pos = _snprintf(buf, bufLen, "{\"ok\":true,\"value\":\"");
+	const char* v = (const char*)val;
+	for (int i = 0; v[i] && pos < bufLen - 8; i++) {
+		if (v[i] == '"' || v[i] == '\\') buf[pos++] = '\\';
+		buf[pos++] = v[i];
+	}
+	_snprintf(buf + pos, bufLen - pos, "\"}");
+	return 0;
+}
+
+LRESULT CMainFrame::OnWbSetBlob(WPARAM wParam, LPARAM lParam)
+{
+	char* buf    = (char*)lParam;
+	int   bufLen = (int)wParam;
+	bool  ok     = false;
+
+	if (buf) {
+		char key[64] = "";
+		MF_JsonGetStr(buf, "key", key, sizeof(key));
+		// The value can be long, so it is read into a heap buffer the size of the request.
+		int cap = (int)strlen(buf) + 1;
+		char* val = new char[cap];
+		val[0] = '\0';
+		MF_JsonGetStr(buf, "value", val, cap);
+		if (key[0]) {
+			ShapeFillTool::setBlob(CString(key), CString(val));
+			CWorldBuilderDoc* pDoc = (CWorldBuilderDoc*)GetActiveDocument();
+			// Only worth writing when the map has a path — an unsaved map has nothing to sit next to.
+			if (pDoc && !pDoc->GetPathName().IsEmpty()) {
+				ShapeFillTool::saveShapes(pDoc->GetPathName());
+				ok = true;
+			}
+		}
+		delete[] val;
+	}
+	if (bufLen > 0) _snprintf(buf, bufLen, "{\"ok\":%s}", ok ? "true" : "false");
+	return 0;
+}
+
 LRESULT CMainFrame::OnWbDelGroup(WPARAM wParam, LPARAM lParam)
 {
 	char* buf    = (char*)lParam;

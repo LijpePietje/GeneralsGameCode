@@ -1468,6 +1468,15 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 		return true;
 	}
 
+	// TheSuperHackers @feature Nemellud 16/08/2026 EmbeddedMode: session blobs
+	if (strcmp(cmd, "session_get_blob") == 0 || strcmp(cmd, "session_set_blob") == 0) {
+		const bool setting = (cmd[8] == 's' && cmd[9] == 'e' && cmd[10] == 't');
+		strncpy(responseBuf, json, responseBufLen - 1); responseBuf[responseBufLen - 1] = '\0';
+		SendMessage(hwnd, setting ? WM_WB_SET_BLOB : WM_WB_GET_BLOB,
+		            (WPARAM)responseBufLen, (LPARAM)responseBuf);
+		return true;
+	}
+
 	// TheSuperHackers @feature Nemellud 16/08/2026 EmbeddedMode: remove a script group
 	if (strcmp(cmd, "sidelist_group_del") == 0) {
 		strncpy(responseBuf, json, responseBufLen - 1); responseBuf[responseBufLen - 1] = '\0';

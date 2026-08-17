@@ -18,6 +18,8 @@
 #include "CUndoable.h"
 #include "Tool.h"
 #include <vector>
+#include <string>
+#include <utility>
 
 class WorldHeightMapEdit;
 
@@ -264,6 +266,17 @@ public:
 	static void saveShapes(const CString& mapPath);
 	static void loadShapes(const CString& mapPath);
 
+	// TheSuperHackers @feature Nemellud 16/08/2026 EmbeddedMode: named blobs in the same sidecar.
+	// The .map is the game's format, so editor-only state (drawn shapes, which wizards were run
+	// and with what settings) has to live beside it. One file with one writer: WorldBuilder owns
+	// .wbsession and everything else hands its data over through the pipe, because two processes
+	// rewriting one file is how you lose half of it.
+	// A blob's content is never parsed here — it is stored and written back verbatim, so a new
+	// kind of state needs no change on this side.
+	static CString getBlob(const CString& key);
+	static void    setBlob(const CString& key, const CString& value);
+	static void    clearBlobs();
+
 	// Undo/redo snapshot helpers (public so ShapeFillUndoable can call them)
 	static ShapeFillSnapshot captureSnapshot();
 	static void              restoreSnapshot(const ShapeFillSnapshot& snap);
@@ -307,6 +320,7 @@ private:
 
 	// Line drawing state
 	static std::vector<LineDef>    m_lines;
+	static std::vector<std::pair<std::string, std::string> > m_blobs;   // key -> opaque payload
 	static Int                     m_nextLineId;
 	static Int                     m_selectedLineId;
 	// TheSuperHackers @feature Nemellud 04/08/2026 ShapeFillTool: width for the line being

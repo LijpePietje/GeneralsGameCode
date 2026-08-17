@@ -62,6 +62,7 @@ Bool                    ShapeFillTool::m_polyDrawing = false;
 std::vector<ShapeVertex> ShapeFillTool::m_polyDraft;
 
 std::vector<LineDef>    ShapeFillTool::m_lines;
+std::vector<std::pair<std::string, std::string> > ShapeFillTool::m_blobs;
 Int                     ShapeFillTool::m_nextLineId   = 1;
 Int                     ShapeFillTool::m_selectedLineId = -1;
 Int                     ShapeFillTool::m_linePreviewWidth = 0;
@@ -734,6 +735,11 @@ void ShapeFillTool::saveShapes(const CString& mapPath)
 			fprintf(f, "INNER_PT %d %d %d\n", s.id, pt.tx, pt.ty);
 	}
 
+	// Opaque payloads owned by other parts of the editor. Written last and never inspected: this
+	// side only guarantees they come back exactly as they were handed over.
+	for (const auto& b : m_blobs)
+		fprintf(f, "BLOB %s %s\n", b.first.c_str(), b.second.c_str());
+
 	for (const auto& l : m_lines) {
 		// TheSuperHackers @feature Nemellud 04/08/2026 ShapeFillTool: previewWidth appended.
 		// Append only, never reorder: an older build reads "LINE %d" and ignores the rest,
@@ -754,6 +760,7 @@ void ShapeFillTool::loadShapes(const CString& mapPath)
 
 	m_shapes.clear();
 	m_lines.clear();
+	m_blobs.clear();
 	m_nextId     = 1;
 	m_nextLineId = 1;
 	m_selectedId = -1;
@@ -796,11 +803,44 @@ void ShapeFillTool::loadShapes(const CString& mapPath)
 			if (sscanf(line, "LINE %d %d", &l.id, &w) < 2) w = 0;
 			l.previewWidth = w;
 			m_lines.push_back(l);
+		} else if (strncmp(line, "BLOB ", 5) == 0) {
+			// "BLOB <key> <payload>" — payload runs to the end of the line and may contain
+			// anything but a newline, so it is split on the first space only.
+			char* key = line + 5;
+			char* sp  = strchr(key, ' ');
+			if (sp) {
+				*sp = '\0';
+				char* val = sp + 1;
+				size_t n = strlen(val);
+				while (n > 0 && (val[n-1] == '\n' || val[n-1] == '\r')) val[--n] = '\0';
+				m_blobs.push_back(std::make_pair(std::string(key), std::string(val)));
+			}
 		}
 	}
 
 	fclose(f);
 	ShapeFillOptions::updateFromTool();
+}
+
+// TheSuperHackers @feature Nemellud 16/08/2026 EmbeddedMode: named blobs, stored verbatim.
+CString ShapeFillTool::getBlob(const CString& key)
+{
+	for (const auto& b : m_blobs)
+		if (b.first == (const char*)key) return CString(b.second.c_str());
+	return CString();
+}
+
+void ShapeFillTool::clearBlobs()
+{
+	m_blobs.clear();
+}
+
+void ShapeFillTool::setBlob(const CString& key, const CString& value)
+{
+	for (auto& b : m_blobs) {
+		if (b.first == (const char*)key) { b.second = (const char*)value; return; }
+	}
+	m_blobs.push_back(std::make_pair(std::string((const char*)key), std::string((const char*)value)));
 }
 
 // -------------------------------------------------------------------------
