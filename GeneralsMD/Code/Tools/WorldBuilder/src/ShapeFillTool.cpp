@@ -752,12 +752,28 @@ void ShapeFillTool::saveShapes(const CString& mapPath)
 	fclose(f);
 }
 
+// TheSuperHackers @feature Nemellud 18/08/2026 EmbeddedMode: read one session line of any length.
+// Returns false only at end of file with nothing read, so a final line without a newline still
+// comes through.
+static Bool readSessionLine(FILE* f, std::string& out)
+{
+	out.clear();
+	char chunk[512];
+	while (fgets(chunk, sizeof(chunk), f)) {
+		out += chunk;
+		if (!out.empty() && out[out.size() - 1] == '\n')
+			return TRUE;
+	}
+	return !out.empty();
+}
+
+// TheSuperHackers @bugfix Nemellud 18/08/2026 EmbeddedMode: opening a map with no session file
+// used to return before clearing, so the previous map's shapes and blobs stayed loaded and were
+// then written into the new map's sidecar on the next save. The wizard records live in a blob, so
+// this read as "my wizards moved to the wrong map" - or, after opening a map whose sidecar holds no
+// blob, as "my wizards are gone". "No session file" means a fresh start, so start fresh.
 void ShapeFillTool::loadShapes(const CString& mapPath)
 {
-	CString path = shapefillPath(mapPath);
-	FILE* f = fopen(path, "r");
-	if (!f) return; // no session file = fresh start
-
 	m_shapes.clear();
 	m_lines.clear();
 	m_blobs.clear();
@@ -765,8 +781,19 @@ void ShapeFillTool::loadShapes(const CString& mapPath)
 	m_nextLineId = 1;
 	m_selectedId = -1;
 
-	char line[512];
-	while (fgets(line, sizeof(line), f)) {
+	CString path = shapefillPath(mapPath);
+	FILE* f = fopen(path, "r");
+	if (!f) { ShapeFillOptions::updateFromTool(); return; } // no session file = fresh start
+
+	// TheSuperHackers @bugfix Nemellud 18/08/2026 EmbeddedMode: a fixed 512-byte line buffer cut
+	// long lines in half. Shapes and lines are short, but a BLOB is not: one supply wizard's record
+	// is around 2000 characters, so it came back truncated, its base64 no longer decoded, and the
+	// caller saw "no wizards saved" for a session file that held them perfectly well. Read a whole
+	// line however long it is.
+	std::string lineBuf;
+	while (readSessionLine(f, lineBuf)) {
+		// Mutable on purpose: the BLOB branch splits the line in place on its first space.
+		char* line = &lineBuf[0];
 		if (strncmp(line, "NEXTID", 6) == 0) {
 			sscanf(line, "NEXTID %d %d", &m_nextId, &m_nextLineId);
 		} else if (strncmp(line, "SHAPE ", 6) == 0) {
@@ -830,11 +857,11 @@ CString ShapeFillTool::getBlob(const CString& key)
 	return CString();
 }
 
-void ShapeFillTool::clearBlobs()
-{
-	m_blobs.clear();
-}
-
+void ShapeFillTool::clearBlobs()
+{
+	m_blobs.clear();
+}
+
 void ShapeFillTool::setBlob(const CString& key, const CString& value)
 {
 	for (auto& b : m_blobs) {
