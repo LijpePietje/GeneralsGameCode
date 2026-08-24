@@ -35,6 +35,7 @@ WbPlaceReq      g_wbPlaceReq        = {0};
 WbFxPreviewReq  g_wbFxPreview       = {0};
 char            g_wbDelObjResult[128] = "";
 WbLinkReq       g_wbLinkReq         = {0};
+WbSelectAtReq   g_wbSelectAtReq     = {0};
 float           g_wbRotateAngleDeg  = 0.0f;
 WbPlantTreeReq  g_wbPlantTreeReq    = {0};
 WbPlantGroveReq g_wbPlantGroveReq   = {0};
@@ -1100,6 +1101,30 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 		JsonGetStr(json, "name1", g_wbLinkReq.name1, sizeof(g_wbLinkReq.name1));
 		JsonGetStr(json, "name2", g_wbLinkReq.name2, sizeof(g_wbLinkReq.name2));
 		int ok = (int)SendMessage(hwnd, WM_WB_LINK_WAYPOINTS, 0, 0);
+		_snprintf(responseBuf, responseBufLen, "{\"ok\":%s}", ok ? "true" : "false");
+		return true;
+	}
+
+	// TheSuperHackers @feature Nemellud 22/08/2026 EmbeddedMode: unlink two waypoints
+	if (strcmp(cmd, "unlink_waypoints") == 0) {
+		g_wbLinkReq = {0};
+		JsonGetStr(json, "name1", g_wbLinkReq.name1, sizeof(g_wbLinkReq.name1));
+		JsonGetStr(json, "name2", g_wbLinkReq.name2, sizeof(g_wbLinkReq.name2));
+		int ok = (int)SendMessage(hwnd, WM_WB_UNLINK_WAYPOINTS, 0, 0);
+		_snprintf(responseBuf, responseBufLen, "{\"ok\":%s}", ok ? "true" : "false");
+		return true;
+	}
+
+	// TheSuperHackers @feature Nemellud 22/08/2026 EmbeddedMode: select the object nearest a position,
+	// which is the only way to reach one that carries no name.
+	if (strcmp(cmd, "select_map_object_at") == 0) {
+		float fval;
+		g_wbSelectAtReq = {0};
+		if (JsonGetFloat(json, "wx", &fval))     g_wbSelectAtReq.wx     = fval;
+		if (JsonGetFloat(json, "wy", &fval))     g_wbSelectAtReq.wy     = fval;
+		if (JsonGetFloat(json, "radius", &fval)) g_wbSelectAtReq.radius = fval;
+		JsonGetStr(json, "template", g_wbSelectAtReq.templateName, sizeof(g_wbSelectAtReq.templateName));
+		int ok = (int)SendMessage(hwnd, WM_WB_SELECT_OBJECT_AT, 0, 0);
 		_snprintf(responseBuf, responseBufLen, "{\"ok\":%s}", ok ? "true" : "false");
 		return true;
 	}

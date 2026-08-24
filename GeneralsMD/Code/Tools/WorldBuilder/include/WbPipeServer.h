@@ -404,7 +404,15 @@ struct WbPlantGroveReq {
 #define WM_WB_MAP_HEIGHT_SET   (WM_USER + 167)  // sync: fill rect region with height value
 #define WM_WB_PLACE_WAYPOINT    (WM_USER + 168)  // sync: place named waypoint at world coords
 #define WM_WB_PLACE_OBJECT_PIPE (WM_USER + 169)  // sync: place game object at world coords
-#define WM_WB_LINK_WAYPOINTS    (WM_USER + 183)  // sync: link two named waypoints
+// TheSuperHackers @bugfix Nemellud 22/08/2026 EmbeddedMode: this shared WM_USER + 183 with
+// WM_WB_DEL_PLAYER, and the message map lists this one first - so every "delete player" request
+// ran the link handler instead, deleted nothing, and leaked the heap json nobody read.
+#define WM_WB_LINK_WAYPOINTS    (WM_USER + 219)  // sync: link two named waypoints
+#define WM_WB_UNLINK_WAYPOINTS  (WM_USER + 220)  // sync: remove the link between two named waypoints
+// TheSuperHackers @feature Nemellud 22/08/2026 EmbeddedMode: reach an object that has no name.
+// Selection was by objectName or template only, so anything unnamed - every prop and building
+// placed without one - could not be addressed at all, not to edit and not to delete.
+#define WM_WB_SELECT_OBJECT_AT  (WM_USER + 221)  // sync: select nearest object to a world position
 
 // Shared data structures for Tier I (written by pipe thread, read by main thread via SendMessage)
 struct WbHeightRect {
@@ -422,6 +430,12 @@ struct WbPlaceReq {
 struct WbLinkReq {
 	char name1[64];  // first waypoint name
 	char name2[64];  // second waypoint name
+};
+
+struct WbSelectAtReq {
+	float wx, wy;            // world coordinates to search around
+	float radius;            // how far to look; 0 means "use the default"
+	char  templateName[64];  // optional filter: only objects of this template
 };
 
 // TheSuperHackers @feature Nemellud 09/08/2026 WorldBuilder: effect picker preview.

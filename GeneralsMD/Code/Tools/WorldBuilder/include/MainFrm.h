@@ -221,6 +221,8 @@ protected:
 	afx_msg LRESULT OnWbTextureBlit(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbPlaceWaypoint(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbLinkWaypoints(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbUnlinkWaypoints(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbSelectObjectAt(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbPlaceObject(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbPlantTree(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbPlantGrove(WPARAM wParam, LPARAM lParam);

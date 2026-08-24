@@ -160,6 +160,8 @@ BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
 	ON_MESSAGE(WM_WB_TEXTURE_BLIT,     OnWbTextureBlit)
 	ON_MESSAGE(WM_WB_PLACE_WAYPOINT,   OnWbPlaceWaypoint)
 	ON_MESSAGE(WM_WB_LINK_WAYPOINTS,   OnWbLinkWaypoints)
+	ON_MESSAGE(WM_WB_UNLINK_WAYPOINTS, OnWbUnlinkWaypoints)
+	ON_MESSAGE(WM_WB_SELECT_OBJECT_AT, OnWbSelectObjectAt)
 	ON_MESSAGE(WM_WB_PLACE_OBJECT_PIPE,OnWbPlaceObject)
 	ON_MESSAGE(WM_WB_PLANT_TREE,       OnWbPlantTree)
 	ON_MESSAGE(WM_WB_PLANT_GROVE,      OnWbPlantGrove)
@@ -2214,6 +2216,7 @@ extern bool           g_wbPipeCreateApply;
 extern WbHeightRect   g_wbPipeHeightRect;
 extern WbPlaceReq     g_wbPlaceReq;
 extern WbLinkReq      g_wbLinkReq;
+extern WbSelectAtReq  g_wbSelectAtReq;
 extern WbPlantTreeReq  g_wbPlantTreeReq;
 extern WbPlantGroveReq g_wbPlantGroveReq;
 
@@ -2442,6 +2445,53 @@ LRESULT CMainFrame::OnWbLinkWaypoints(WPARAM, LPARAM)
 	pDoc->addWaypointLink(pWay1->getWaypointID(), pWay2->getWaypointID());
 	pDoc->updateAllViews();
 	return 1;
+}
+
+// TheSuperHackers @feature Nemellud 22/08/2026 EmbeddedMode: unlink two waypoints. Linking existed,
+// unlinking did not, so a route drawn through the wrong node could only be repaired by deleting and
+// redrawing it - and a caller wanting to splice a node into an existing leg had no way at all.
+LRESULT CMainFrame::OnWbUnlinkWaypoints(WPARAM, LPARAM)
+{
+	CWorldBuilderDoc* pDoc = (CWorldBuilderDoc*)GetActiveDocument();
+	if (!pDoc || !g_wbLinkReq.name1[0] || !g_wbLinkReq.name2[0]) return 0;
+	MapObject* pWay1 = nullptr;
+	MapObject* pWay2 = nullptr;
+	for (MapObject* p = MapObject::getFirstMapObject(); p; p = p->getNext()) {
+		if (!p->isWaypoint()) continue;
+		if (strcmp(p->getWaypointName().str(), g_wbLinkReq.name1) == 0) pWay1 = p;
+		if (strcmp(p->getWaypointName().str(), g_wbLinkReq.name2) == 0) pWay2 = p;
+		if (pWay1 && pWay2) break;
+	}
+	if (!pWay1 || !pWay2) return 0;
+	pDoc->removeWaypointLink(pWay1->getWaypointID(), pWay2->getWaypointID());
+	pDoc->updateAllViews();
+	return 1;
+}
+
+// TheSuperHackers @feature Nemellud 22/08/2026 EmbeddedMode: select the object nearest a world
+// position. OnWbSelectObject matches on objectName or template, which leaves every unnamed object
+// unreachable: a caller could place one but never select, edit or delete it again. Nearest within a
+// radius is what a click does, so it is what this does.
+LRESULT CMainFrame::OnWbSelectObjectAt(WPARAM, LPARAM)
+{
+	const WbSelectAtReq& r = g_wbSelectAtReq;
+	const Real radius = r.radius > 0.0f ? r.radius : 50.0f;
+	MapObject* best = nullptr;
+	Real bestDist = radius;
+	for (MapObject* p = MapObject::getFirstMapObject(); p; p = p->getNext()) {
+		p->setSelected(FALSE);
+		if (p->isWaypoint()) continue;
+		if (r.templateName[0] && strcmp(p->getName().str(), r.templateName) != 0) continue;
+		const Coord3D* loc = p->getLocation();
+		if (!loc) continue;
+		const Real dx = loc->x - r.wx, dy = loc->y - r.wy;
+		const Real dist = (Real)sqrt(dx * dx + dy * dy);
+		if (dist <= bestDist) { bestDist = dist; best = p; }
+	}
+	if (best) best->setSelected(TRUE);
+	CWorldBuilderDoc* pDoc = (CWorldBuilderDoc*)GetActiveDocument();
+	if (pDoc) pDoc->updateAllViews();
+	return best ? 1 : 0;
 }
 
 // TheSuperHackers @feature Nemellud 25/05/2026 EmbeddedMode: place game object at world coords
