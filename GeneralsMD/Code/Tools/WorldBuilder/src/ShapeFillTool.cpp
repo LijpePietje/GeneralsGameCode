@@ -407,7 +407,13 @@ void ShapeFillTool::applySelectedShape(CWorldBuilderDoc* pDoc)
 		Int existingH = pHM->getHeight(hx, hy);
 		Int outerH = sampleOuterTerrain(bt.pt.x, bt.pt.y);
 		Int h = (Int)(outerH + t * (shape->innerHeight - outerH));
-		h = std::max(0, std::min(80, h));
+		// TheSuperHackers @bugfix Nemellud 25/08/2026 ShapeFillTool: the border was clamped to
+		// 80 while the inner zone (above) takes innerHeight unclamped, so any shape taller than
+		// 80 got a ramp that climbed to 80, ran flat, and then jumped to full height in one
+		// cell. Measured on a rect carved to 151 with a 6-tile border: 28 38 58 79 80 80 80 151.
+		// That terrace is what left a dam standing on a shelf with its ends in mid-air. The
+		// height map stores a byte, so that is the range the ramp gets too.
+		h = std::max(0, std::min(255, h));
 		if (existingH != h)
 			pHM->setHeight(hx, hy, (UnsignedByte)h);
 		if (borderTex >= 0)
