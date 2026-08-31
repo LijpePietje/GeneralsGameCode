@@ -413,6 +413,7 @@ struct WbPlantGroveReq {
 // Selection was by objectName or template only, so anything unnamed - every prop and building
 // placed without one - could not be addressed at all, not to edit and not to delete.
 #define WM_WB_SELECT_OBJECT_AT  (WM_USER + 221)  // sync: select nearest object to a world position
+#define WM_WB_GET_SEL_TRIGGER   (WM_USER + 222)  // sync: the polygon trigger under the polygon tool
 
 // Shared data structures for Tier I (written by pipe thread, read by main thread via SendMessage)
 struct WbHeightRect {

@@ -1369,6 +1369,11 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 		return true;
 	}
 
+	if (strcmp(cmd, "trigger_get_selected") == 0) {
+		SendMessage(hwnd, WM_WB_GET_SEL_TRIGGER, (WPARAM)responseBufLen, (LPARAM)responseBuf);
+		return true;
+	}
+
 	if (strcmp(cmd, "map_get_triggers") == 0) {
 		SendMessage(hwnd, WM_WB_GET_TRIGGERS, (WPARAM)responseBufLen, (LPARAM)responseBuf);
 		return true;

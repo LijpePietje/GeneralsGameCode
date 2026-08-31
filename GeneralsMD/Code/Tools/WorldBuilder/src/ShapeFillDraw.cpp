@@ -381,8 +381,16 @@ std::vector<ShapeHandle> ShapeFillTool::getHandles(const ShapeDef& shape)
 				handles.push_back({HDL_INNER_VERTEX, shape.id, i, inner[i].tx, inner[i].ty});
 		}
 	} else {
-		for (Int i = 0; i < (Int)shape.points.size(); i++)
-			handles.push_back({HDL_POLY_VERTEX, shape.id, i, shape.points[i].tx, shape.points[i].ty});
+		// TheSuperHackers @bugfix Nemellud 26/08/2026 ShapeFillTool: outer vertex handles are
+		// Edit-mode only, like the inner ones two lines down and for the same reason. A polygon
+		// used to carry a handle on every corner in Select mode as well, so grabbing it to move
+		// it caught a vertex instead and pulled the outline out of shape — the one thing Select
+		// mode is supposed to be safe from. Select moves the whole shape; Edit is where points
+		// are for, which is what the panel has always said.
+		if (m_mode == SF_EDIT_SHAPE) {
+			for (Int i = 0; i < (Int)shape.points.size(); i++)
+				handles.push_back({HDL_POLY_VERTEX, shape.id, i, shape.points[i].tx, shape.points[i].ty});
+		}
 		// Inner polygon vertex handles (only in Edit mode — prevent blocking Select-mode move)
 		if (m_mode == SF_EDIT_SHAPE && shape.borderWidth > 0) {
 			auto inner = getEffectiveInner(shape);

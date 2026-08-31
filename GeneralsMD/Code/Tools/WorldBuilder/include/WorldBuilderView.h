@@ -45,6 +45,15 @@ public:
 	//{{AFX_VIRTUAL(CWorldBuilderView)
 	public:
 	virtual BOOL PreCreateWindow(CREATESTRUCT& cs) override;
+	// TheSuperHackers @bugfix Nemellud 30/08/2026 PolygonTool: grab radius follows the zoom.
+	// The base class returns a flat 4 while WbView3d scales its own with the camera, so a
+	// polygon point was a 9x9 pixel target here at any zoom -- which is why polygons could be
+	// edited in the 3D view and not in the 2D one. Same formula as WbView3d: 0.4 of a cell.
+	virtual Int getPickPixels() override {
+		Int dx = (Int)(m_cellSize * 0.4f);
+		if (dx < 4) dx = 3;
+		return dx + 3;
+	}
 	virtual Int getScrollOffsetX() const override { return mXScrollOffset; }
 	virtual Int getScrollOffsetY() const override { return mYScrollOffset; }
 	protected:

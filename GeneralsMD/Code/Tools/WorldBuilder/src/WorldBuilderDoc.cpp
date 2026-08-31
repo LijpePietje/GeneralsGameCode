@@ -1299,6 +1299,11 @@ BOOL CWorldBuilderDoc::OnNewDocument()
 	// map's sidecar the first time anything saved.
 	ShapeFillTool::clearBlobs();
 
+	// TheSuperHackers @bugfix Nemellud 26/08/2026 EmbeddedMode: and neither does it have the
+	// previous map's shapes. They live in statics too, so File > New used to leave the old
+	// outlines hanging over fresh terrain.
+	ShapeFillTool::resetForNewMap();
+
 	TNewHeightInfo hi;
 	hi.initialHeight = AfxGetApp()->GetProfileInt("GameOptions", "Default Map Height", 16);
 	hi.xExtent = AfxGetApp()->GetProfileInt("GameOptions", "Default Map X-size", 100);

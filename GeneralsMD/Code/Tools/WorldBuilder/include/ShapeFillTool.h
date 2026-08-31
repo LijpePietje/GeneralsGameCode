@@ -265,6 +265,8 @@ public:
 	// Persistence
 	static void saveShapes(const CString& mapPath);
 	static void loadShapes(const CString& mapPath);
+	// Shapes are map state: a new document starts without them, the way loadShapes starts.
+	static void resetForNewMap();
 
 	// TheSuperHackers @feature Nemellud 16/08/2026 EmbeddedMode: named blobs in the same sidecar.
 	// The .map is the game's format, so editor-only state (drawn shapes, which wizards were run

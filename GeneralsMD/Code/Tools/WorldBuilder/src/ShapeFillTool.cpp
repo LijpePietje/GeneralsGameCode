@@ -778,14 +778,25 @@ static Bool readSessionLine(FILE* f, std::string& out)
 // then written into the new map's sidecar on the next save. The wizard records live in a blob, so
 // this read as "my wizards moved to the wrong map" - or, after opening a map whose sidecar holds no
 // blob, as "my wizards are gone". "No session file" means a fresh start, so start fresh.
-void ShapeFillTool::loadShapes(const CString& mapPath)
+// TheSuperHackers @bugfix Nemellud 26/08/2026 ShapeFillTool: shapes are map state, so a new
+// document has to start without them. They live in statics and survived File > New, which meant
+// the previous map's outlines were still on screen over fresh terrain — and were written into
+// the new map's sidecar the first time anything saved. clearBlobs() was given this treatment
+// when the wizard state had the same problem; the shapes themselves were missed.
+void ShapeFillTool::resetForNewMap()
 {
 	m_shapes.clear();
 	m_lines.clear();
 	m_blobs.clear();
-	m_nextId     = 1;
-	m_nextLineId = 1;
-	m_selectedId = -1;
+	m_nextId         = 1;
+	m_nextLineId     = 1;
+	m_selectedId     = -1;
+	m_selectedLineId = -1;
+}
+
+void ShapeFillTool::loadShapes(const CString& mapPath)
+{
+	resetForNewMap();
 
 	CString path = shapefillPath(mapPath);
 	FILE* f = fopen(path, "r");

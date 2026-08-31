@@ -210,6 +210,7 @@ protected:
 	afx_msg LRESULT OnWbGetObjects(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbGetWaypoints(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbGetTriggers(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnWbGetSelTrigger(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbGetTeams(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnWbGetSelected(WPARAM wParam, LPARAM lParam);
 	// TheSuperHackers @feature Nemellud 25/05/2026 EmbeddedMode: Tier I terrain write handlers

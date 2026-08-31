@@ -50,6 +50,8 @@ extern char g_wbDelObjResult[128];
 #include "WbPipeServer.h"
 #include "NewHeightMap.h"
 #include "ShapeFillTool.h"
+// For PolygonTool::m_poly_curSelectedPolygon: which water shape the polygon tool has hold of.
+#include "PolygonTool.h"
 // TheSuperHackers @feature Nemellud 25/05/2026 EmbeddedMode: full tool + map read-back handlers
 #include "BrushTool.h"
 #include "brushoptions.h"
@@ -152,6 +154,7 @@ BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
 	ON_MESSAGE(WM_WB_GET_OBJECTS,     OnWbGetObjects)
 	ON_MESSAGE(WM_WB_GET_WAYPOINTS,   OnWbGetWaypoints)
 	ON_MESSAGE(WM_WB_GET_TRIGGERS,    OnWbGetTriggers)
+	ON_MESSAGE(WM_WB_GET_SEL_TRIGGER, OnWbGetSelTrigger)
 	ON_MESSAGE(WM_WB_GET_TEAMS,       OnWbGetTeams)
 	ON_MESSAGE(WM_WB_GET_SELECTED,    OnWbGetSelected)
 	ON_MESSAGE(WM_WB_SF_CREATE_PIPE,   OnWbSfCreatePipe)
@@ -1847,6 +1850,39 @@ LRESULT CMainFrame::OnWbGetWaypoints(WPARAM wParam, LPARAM lParam)
 }
 
 // TheSuperHackers @feature Nemellud 25/05/2026 EmbeddedMode: return all polygon triggers as JSON for pipe
+// TheSuperHackers @feature Nemellud 30/08/2026 EmbeddedMode: which polygon trigger is selected.
+// The panel can list every water body already; what it could not do is answer the question you
+// have with the mouse in your hand -- this shape I just clicked, how high does its water stand?
+// A water polygon is flat, so point 0's z is the level.
+LRESULT CMainFrame::OnWbGetSelTrigger(WPARAM wParam, LPARAM lParam)
+{
+	char* buf    = (char*)lParam;
+	int   maxLen = (int)wParam;
+	if (!buf || maxLen < 64) return 0;
+
+	// m_poly_curSelectedPolygon is protected, but PolygonTool publishes isSelected() beside it,
+	// so the answer comes from walking the list rather than from opening up the tool's state.
+	PolygonTrigger* pTrig = nullptr;
+	for (PolygonTrigger* p = PolygonTrigger::getFirstPolygonTrigger(); p; p = p->getNext()) {
+		if (PolygonTool::isSelected(p)) { pTrig = p; break; }
+	}
+	if (pTrig == nullptr) {
+		_snprintf(buf, maxLen, "{\"ok\":true,\"selected\":false}");
+		return 0;
+	}
+
+	int nPts = pTrig->getNumPoints();
+	const ICoord3D* pt0 = (nPts > 0) ? pTrig->getPoint(0) : nullptr;
+	_snprintf(buf, maxLen,
+		"{\"ok\":true,\"selected\":true,\"id\":%d,\"name\":\"%s\","
+		"\"isWater\":%s,\"isRiver\":%s,\"z\":%d,\"points\":%d}",
+		pTrig->getID(), pTrig->getTriggerName().str(),
+		pTrig->isWaterArea() ? "true" : "false",
+		pTrig->isRiver()     ? "true" : "false",
+		pt0 ? pt0->z : 0, nPts);
+	return 0;
+}
+
 LRESULT CMainFrame::OnWbGetTriggers(WPARAM wParam, LPARAM lParam)
 {
 	char* buf = (char*)lParam;
@@ -2003,6 +2039,9 @@ LRESULT CMainFrame::OnWbObjGetProps(WPARAM wParam, LPARAM lParam)
 
 	const Coord3D* loc = sel->getLocation();
 	float wx = loc ? loc->x : 0.f, wy = loc ? loc->y : 0.f;
+	// TheSuperHackers @feature Nemellud 30/08/2026 EmbeddedMode: Z offset exposed via obj_get_props.
+	// The engine ADDS this to the ground height when it loads the map, so negative sinks the object.
+	float wz = loc ? loc->z : 0.f;
 	float angleDeg = sel->getAngle() * (180.f / 3.14159265f);
 
 	if (sel->isWaypoint()) {
@@ -2084,7 +2123,7 @@ LRESULT CMainFrame::OnWbObjGetProps(WPARAM wParam, LPARAM lParam)
 	_snprintf(buf, maxLen,
 		"{\"ok\":true,\"type\":\"object\","
 		"\"templateName\":\"%s\","
-		"\"wx\":%.2f,\"wy\":%.2f,\"angle\":%.2f,"
+		"\"wx\":%.2f,\"wy\":%.2f,\"wz\":%.2f,\"angle\":%.2f,"
 		"\"team\":\"%s\",\"name\":\"%s\",\"script\":\"%s\","
 		"\"health\":%d,\"maxHP\":%d,"
 		"\"aggressiveness\":%d,\"veterancy\":%d,"
@@ -2094,7 +2133,7 @@ LRESULT CMainFrame::OnWbObjGetProps(WPARAM wParam, LPARAM lParam)
 		"\"powered\":%s,\"selectable\":%s,\"aiRecruitable\":%s,"
 		"\"isUnit\":%s,\"isStructure\":%s}",
 		tmpl ? tmpl->getName().str() : "",
-		wx, wy, angleDeg,
+		wx, wy, wz, angleDeg,
 		DSTR(TheKey_originalOwner), DSTR(TheKey_objectName), DSTR(TheKey_objectScriptAttachment),
 		DINT(TheKey_objectInitialHealth), DINT(TheKey_objectMaxHPs),
 		DINT(TheKey_objectAggressiveness), DINT(TheKey_objectVeterancy),
@@ -2139,6 +2178,35 @@ LRESULT CMainFrame::OnWbObjSetProp(WPARAM, LPARAM lParam)
 				pDoc->AddAndDoUndoable(pUndo);
 				pUndo->SetOffset(dx, dy);
 				REF_PTR_RELEASE(pUndo);
+			}
+			needViewRefresh = true;
+		}
+		delete[] json;
+		if (needViewRefresh && pDoc) pDoc->updateAllViews();
+		return 0;
+	}
+
+	// TheSuperHackers @feature Nemellud 30/08/2026 EmbeddedMode: set the Z offset of the selection.
+	// Absolute, like the dialog's own slider, and clamped to the range that slider offers.
+	if (strcmp(key, "wz") == 0 && pDoc) {
+		int ival = 0;
+		if (MF_JsonGetInt(json, "value", &ival)) {
+			// The dialog's own slider stops at +/-50, but nothing else does: the z is a plain
+			// float on Coord3D and the engine only adds it to the ground height. Copying the
+			// slider's range in here made it a real limit, and it capped how low a sunk model
+			// could be set -- a dam could not be put lower than 67 above the ground it stood
+			// on, however low the author wanted it. The ceiling is the height range terrain
+			// itself has (255 bytes, ~159 world), doubled, which nothing sane will reach.
+			if (ival < -255) ival = -255;
+			if (ival >  255) ival =  255;
+			// One undoable for the whole selection: it walks the selected objects itself.
+			ModifyObjectUndoable* pUndo = new ModifyObjectUndoable(pDoc);
+			pDoc->AddAndDoUndoable(pUndo);
+			pUndo->SetZOffset((Real)ival);
+			REF_PTR_RELEASE(pUndo);
+			if (p3View) {
+				for (MapObject* p = MapObject::getFirstMapObject(); p; p = p->getNext())
+					if (p->isSelected()) p3View->invalObjectInView(p);
 			}
 			needViewRefresh = true;
 		}
