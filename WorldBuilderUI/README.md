@@ -1,5 +1,13 @@
 # WorldBuilder Modern UI
 
+> **Snapshot of 10 July 2026 — not the current source.**
+> The UI is developed in a separate repository; this folder is a point-in-time copy kept here so
+> that a public clone has something to read. It has not been updated since: `app/api-server.js`
+> here is 1480 lines against 3129 in the live version, so several features documented elsewhere
+> are absent. Build from this at your own risk, and do not send patches against it.
+> The C++ WorldBuilder in the rest of this repository *is* current and is what the GPL source
+> offer refers to.
+
 A modern, AI-drivable interface for the C&C Generals: Zero Hour WorldBuilder.
 An Electron app embeds the real WorldBuilder engine (built from this repo, with
 an added named-pipe control server) behind a new UI — and exposes everything as
