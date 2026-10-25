@@ -459,6 +459,12 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
 		m_wndStatusBar.ShowWindow(SW_HIDE);
 		if (m_layersList) m_layersList->ShowWindow(SW_HIDE);
 		RecalcLayout(); // force view to fill the full client area (no toolbar/statusbar gaps)
+		// TheSuperHackers @bugfix Nemellud 25/10/2026 EmbeddedMode: this early return skipped the
+		// autosave timer below, so the safety net after a crash - UserData\WorldBuilderAutoSave1-3.map -
+		// was never written from the toolkit UI. Same settings as the classic editor.
+		m_autoSave = ::AfxGetApp()->GetProfileInt(MAIN_FRAME_SECTION, "AutoSave", 1) != 0;
+		m_autoSaveInterval = ::AfxGetApp()->GetProfileInt(MAIN_FRAME_SECTION, "AutoSaveIntervalSeconds", 120);
+		m_hAutoSaveTimer = this->SetTimer(1, m_autoSaveInterval*1000, nullptr);
 		return 0;
 	}
 
@@ -3589,11 +3595,17 @@ LRESULT CMainFrame::OnWbSelectObject(WPARAM, LPARAM lParam)
 }
 
 // TheSuperHackers @feature Nemellud 06/06/2026 EmbeddedMode: handle generic pipe sub-commands (SUBCMD_LOAD)
+// TheSuperHackers @bugfix Nemellud 25/10/2026 EmbeddedMode: no native "save changes?" on a pipe load
 LRESULT CMainFrame::OnWbPipeCmd(WPARAM wParam, LPARAM lParam)
 {
 	if (wParam == 1 /* SUBCMD_LOAD */) {
 		char* path = reinterpret_cast<char*>(lParam);
 		if (path) {
+			// Same as OnWbNewMap: OpenDocumentFile asks through CDocument::SaveModified(), a native
+			// dialog behind the overlay that nobody can reach. The UI has already asked the user
+			// (js/mapsafety.js), so a load arriving here means the open map may go.
+			CWorldBuilderDoc* pDoc = (CWorldBuilderDoc*)GetActiveDocument();
+			if (pDoc) pDoc->SetModifiedFlag(FALSE);
 			AfxGetApp()->OpenDocumentFile(path);
 			free(path);
 		}
@@ -4469,14 +4481,45 @@ LRESULT CMainFrame::OnWbSetRoadTool(WPARAM, LPARAM lp)
 	return 1;
 }
 
+// TheSuperHackers @bugfix Nemellud 25/10/2026 EmbeddedMode: can this path be written at all?
+// CDocument::OnSaveDocument reports a file it cannot open with a modal message box, and that box
+// blocks the pipe until someone happens to click it - nobody can, behind the overlay. Asking
+// Windows first turns the common failures (read-only, locked by another program, folder gone)
+// into an answer instead. Opens an existing file without changing it; never creates one.
+static LRESULT WbCheckWritable(const char* path)
+{
+	DWORD attr = GetFileAttributes(path);
+	if (attr == INVALID_FILE_ATTRIBUTES) {
+		char dir[MAX_PATH];
+		strncpy(dir, path, sizeof(dir) - 1);
+		dir[sizeof(dir) - 1] = '\0';
+		char* slash = strrchr(dir, '\\');
+		if (!slash) slash = strrchr(dir, '/');
+		if (slash) *slash = '\0';
+		DWORD dirAttr = GetFileAttributes(dir);
+		return (dirAttr != INVALID_FILE_ATTRIBUTES && (dirAttr & FILE_ATTRIBUTE_DIRECTORY))
+			? WB_SAVE_OK : WB_SAVE_NO_FOLDER;
+	}
+	if (attr & FILE_ATTRIBUTE_READONLY) return WB_SAVE_READ_ONLY;
+	HANDLE h = CreateFile(path, GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+	if (h == INVALID_HANDLE_VALUE) return WB_SAVE_LOCKED;
+	CloseHandle(h);
+	return WB_SAVE_OK;
+}
+
 // TheSuperHackers @feature Nemellud 10/06/2026 EmbeddedMode: save map to explicit path without native dialog
-LRESULT CMainFrame::OnWbSaveToPath(WPARAM, LPARAM)
+// TheSuperHackers @bugfix Nemellud 25/10/2026 EmbeddedMode: wParam=1 saves to the map's own path, so
+// a plain save can answer too instead of being posted and forgotten; failures come back as a reason
+LRESULT CMainFrame::OnWbSaveToPath(WPARAM wParam, LPARAM)
 {
 	CWorldBuilderDoc* pDoc = (CWorldBuilderDoc*)GetActiveDocument();
-	if (!pDoc || g_wbSavePath[0] == '\0') return 0;
-	BOOL ok = pDoc->SaveToPath(g_wbSavePath);
+	if (!pDoc) return WB_SAVE_FAILED;
+	CString target = (wParam == 1) ? pDoc->GetPathName() : CString(g_wbSavePath);
 	g_wbSavePath[0] = '\0';
-	return ok ? 1 : 0;
+	if (target.IsEmpty()) return (wParam == 1) ? WB_SAVE_UNTITLED : WB_SAVE_FAILED;
+	LRESULT check = WbCheckWritable(target);
+	if (check != WB_SAVE_OK) return check;
+	return pDoc->SaveToPath(target) ? WB_SAVE_OK : WB_SAVE_FAILED;
 }
 
 // TheSuperHackers @feature Nemellud 10/06/2026 EmbeddedMode: read global lighting state via pipe.

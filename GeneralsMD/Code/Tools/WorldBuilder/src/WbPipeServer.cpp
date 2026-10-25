@@ -459,6 +459,25 @@ static UINT lookupCmd(const NamedCmd* table, const char* name)
 	return 0;
 }
 
+// TheSuperHackers @bugfix Nemellud 25/10/2026 EmbeddedMode: a failed save says why, in words a
+// user can act on - the UI shows this text as it is.
+static void writeSaveResult(char* responseBuf, int responseBufLen, LRESULT r)
+{
+	const char* error = nullptr;
+	switch (r) {
+		case WB_SAVE_OK:        break;
+		case WB_SAVE_UNTITLED:  error = "untitled: the map has no file yet, use Save As"; break;
+		case WB_SAVE_READ_ONLY: error = "the map file is read-only"; break;
+		case WB_SAVE_LOCKED:    error = "the map file is in use by another program or cannot be written"; break;
+		case WB_SAVE_NO_FOLDER: error = "the folder for this map does not exist"; break;
+		default:                error = "the editor could not write the map"; break;
+	}
+	if (error)
+		_snprintf(responseBuf, responseBufLen, "{\"ok\":false,\"error\":\"%s\"}", error);
+	else
+		_snprintf(responseBuf, responseBufLen, "{\"ok\":true}");
+}
+
 // ── Main dispatcher ───────────────────────────────────────────────────────────
 
 bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
@@ -512,10 +531,13 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 		_snprintf(responseBuf, responseBufLen, "{\"ok\":true}");
 		return true;
 	}
+	// TheSuperHackers @bugfix Nemellud 25/10/2026 EmbeddedMode: save synchronously, like save_to.
+	// It used to post ID_FILE_SAVE and answer {"ok":true} at once, so a save that failed - or one
+	// that opened a native dialog nobody could reach - still told the user their map was safe.
 	if (strcmp(cmd, "save") == 0) {
-		PostMessage(hwnd, WM_COMMAND, WB_ID_SAVE, 0);
-		_snprintf(responseBuf, responseBufLen, "{\"ok\":true}");
-		return true;
+		LRESULT r = SendMessage(hwnd, WM_WB_SAVE_TO_PATH, 1, 0);
+		writeSaveResult(responseBuf, responseBufLen, r);
+		return (r == WB_SAVE_OK);
 	}
 	// TheSuperHackers @feature Nemellud 10/06/2026 EmbeddedMode: save to explicit path (no dialog)
 	if (strcmp(cmd, "save_to") == 0) {
@@ -527,9 +549,9 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 		}
 		strncpy(g_wbSavePath, path, sizeof(g_wbSavePath) - 1);
 		g_wbSavePath[sizeof(g_wbSavePath) - 1] = '\0';
-		LRESULT ok = SendMessage(hwnd, WM_WB_SAVE_TO_PATH, 0, 0);
-		_snprintf(responseBuf, responseBufLen, "{\"ok\":%s}", ok ? "true" : "false");
-		return (ok != 0);
+		LRESULT r = SendMessage(hwnd, WM_WB_SAVE_TO_PATH, 0, 0);
+		writeSaveResult(responseBuf, responseBufLen, r);
+		return (r == WB_SAVE_OK);
 	}
 
 	if (strcmp(cmd, "tool") == 0) {

@@ -157,6 +157,9 @@ private:
 #define WM_WB_SEL_ROAD      (WM_USER + 197)  // async: select road/bridge nearest to coords in WB; lParam=heap json ptr
 #define WM_WB_SET_BRIDGE_NAME (WM_USER + 198)  // async: set wbScriptName dict property on bridge; lParam=heap json ptr
 #define WM_WB_SAVE_TO_PATH    (WM_USER + 199)  // sync: save map to explicit path (no dialog); reads g_wbSavePath
+                                               //       wParam=1: save to the map's own path instead; returns WB_SAVE_*
+enum { WB_SAVE_FAILED = 0, WB_SAVE_OK = 1, WB_SAVE_UNTITLED = 2, WB_SAVE_READ_ONLY = 3,
+       WB_SAVE_LOCKED = 4, WB_SAVE_NO_FOLDER = 5 };
 // TheSuperHackers @feature Nemellud 10/06/2026 EmbeddedMode: global lighting via pipe
 #define WM_WB_GET_LIGHTING    (WM_USER + 200)  // sync: read global lighting state; wParam=bufLen, lParam=buf
 #define WM_WB_SET_LIGHTING    (WM_USER + 201)  // sync: set light colors/angles/timeOfDay; json in buf, result written back

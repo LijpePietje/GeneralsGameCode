@@ -859,6 +859,7 @@ Bool CWorldBuilderDoc::ParseWaypointData(DataChunkInput &file, DataChunkInfo *in
 	return true;
 }
 
+// TheSuperHackers @bugfix Nemellud 25/10/2026 EmbeddedMode: no modal box when the autosave fails
 void CWorldBuilderDoc::autoSave()
 {
 	// srj sez: put autosave into our user data folder, not the ap dir
@@ -908,7 +909,12 @@ void CWorldBuilderDoc::autoSave()
 		theFile.Close();
 		m_needAutosave = false;
 	}	catch(...) {
-		::AfxMessageBox(IDS_NO_AUTOSAVE);
+		// TheSuperHackers @bugfix Nemellud 25/10/2026 EmbeddedMode: a modal box behind the overlay
+		// would stall every pipe command until someone found it; try again on the next tick instead.
+		if (CWorldBuilderApp::IsEmbedded())
+			DEBUG_LOG(("autoSave: could not write %s", autosave1.str()));
+		else
+			::AfxMessageBox(IDS_NO_AUTOSAVE);
 	}
 }
 
