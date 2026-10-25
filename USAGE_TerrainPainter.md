@@ -22,7 +22,7 @@ With this tool you draw closed shapes — rectangles, circles, polygons — set 
 ## Installation
 
 ### Quick install
-Download `WorldBuilderZH.exe` from the [latest release](https://github.com/LijpePietje/ProjectWorldbuilder/releases/latest) and copy it to your C&C Generals Zero Hour installation folder — the same folder that contains `generals.exe` or `generalszh.exe`.
+Download the WorldBuilder Toolkit from the [latest release](https://github.com/LijpePietje/GeneralsGameCode/releases/latest) and follow the install steps in its release notes. The editor in it, `WorldBuilderZH_Toolkit.exe`, goes into your C&C Generals Zero Hour installation folder — the same folder that contains `generals.exe` or `generalszh.exe`.
 
 ### Build from source
 Clone the [GeneralsGameCode fork](https://github.com/LijpePietje/GeneralsGameCode/tree/feature/shapefill-tool) and follow the build instructions in that repository's README. Once built, copy `WorldBuilderZH.exe` to the same folder.

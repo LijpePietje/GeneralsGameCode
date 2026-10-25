@@ -1,87 +1,30 @@
-# WorldBuilder Modern UI
+# WorldBuilder Toolkit
 
-> **Snapshot of 10 July 2026 — not the current source.**
-> The UI is developed in a separate repository; this folder is a point-in-time copy kept here so
-> that a public clone has something to read. It has not been updated since: `app/api-server.js`
-> here is 1480 lines against 3129 in the live version, so several features documented elsewhere
-> are absent. Build from this at your own risk, and do not send patches against it.
-> The C++ WorldBuilder in the rest of this repository *is* current and is what the GPL source
-> offer refers to.
+**Draw your map, let WorldBuilder build it.**
 
-A modern, AI-drivable interface for the C&C Generals: Zero Hour WorldBuilder.
-An Electron app embeds the real WorldBuilder engine (built from this repo, with
-an added named-pipe control server) behind a new UI — and exposes everything as
-a REST API on `http://127.0.0.1:8099`, so scripts and AI agents can build maps.
+An unofficial, modified build of the C&C Generals: Zero Hour WorldBuilder, with a modern
+interface on top. You draw shapes, rivers and roads; the real WorldBuilder engine underneath turns
+them into terrain, textures and water. A local REST API lets scripts and AI agents drive the
+editor too. Not made, endorsed or supported by Electronic Arts; you need your own installed copy
+of the game.
 
-See [app/AI-DRIVING.md](app/AI-DRIVING.md) for the API guide.
+![Three shapes painted into the terrain in one click](../img_TerrainPainter/02_shapes_applied.png)
 
-## Download (no build needed)
+## Download
 
-Prebuilt binaries are on the
-[**Releases page**](https://github.com/LijpePietje/GeneralsGameCode/releases) —
-grab `WorldBuilderUI.exe`, `WorldBuilderZH.exe` and `Editor-Molds.zip`, follow
-the 3-step install in the release notes, and skip the build sections below
-entirely.
+Get the latest **WorldBuilder Toolkit** from the
+[Releases page](https://github.com/LijpePietje/GeneralsGameCode/releases/latest): run the setup, or
+unzip the zip into your game folder. The release notes have the install steps.
 
-## What's in this folder
+Use v0.2.1 or later. Earlier versions had a security hole in the local API (any web page open in
+your browser could drive the editor while it ran); the v0.2.1 notes explain it.
 
-```
-WorldBuilderUI/
-  app/                  The Electron app (UI + REST API + WB process embedding)
-  building_icons/       Object palette icons  (served by the API)
-  terrain_textures/     Texture swatches      (served by the API)
-  REAL_OBJECT_NAMES.txt Object palette source data
-```
+## Where the source is
 
-The layout matters: `app/` resolves its assets one level up (`../building_icons`
-etc.), both in dev and when packaging.
+- **The editor** (`WorldBuilderZH_Toolkit.exe`) is built from this repository, branch
+  [`feature/shapefill-tool`](https://github.com/LijpePietje/GeneralsGameCode/tree/feature/shapefill-tool).
+  That is the source the GPL offer in the releases refers to.
+- **The interface** is developed separately. This folder used to hold a copy of it from
+  July 2026; that copy was outdated and has been removed.
 
-## Build the engine (WorldBuilderZH.exe)
-
-This UI drives the WorldBuilder built from **this branch** — it needs the
-`WbPipeServer` (named pipe `\\.\pipe\wb-engine`) that lives in
-`GeneralsMD/Code/Tools/WorldBuilder/`. A stock WorldBuilder won't respond.
-
-1. Configure/build this repo as usual (CMake, VC6/MSVC — see the root README),
-   target `z_worldbuilder`, config Release.
-2. Copy the result into your Zero Hour install folder:
-   `build/win32/GeneralsMD/Release/WorldBuilderZH.exe` →
-   `<game folder>/WorldBuilderZH.exe`
-3. Copy the mesh molds: `app/data/molds/*.w3d` →
-   `<game folder>/Data/Editor/Molds/`
-
-## Run the UI
-
-**Dev mode:**
-
-```
-cd app
-npm install
-npm start
-```
-
-Note: the dev fallback path for `WorldBuilderZH.exe` points at a default Origin
-install; if yours lives elsewhere, drop a packaged build in your game folder
-instead (below), or adjust `_WB_DEV_FALLBACK` in `app/main.js`.
-
-**Shareable single exe:**
-
-```
-cd app
-npm install
-npm run dist
-```
-
-Produces `app/dist/WorldBuilderUI.exe` (~67 MB — it bundles Chromium/Node;
-that's Electron's floor). Put it in the game folder **next to
-WorldBuilderZH.exe** and double-click. It finds the engine by sitting next to
-it; `debug.log` and settings are written next to the exe.
-
-## Verify
-
-```
-curl http://127.0.0.1:8099/api/status
-→ {"ok":true,"wbReady":true,"pipeReady":true,...}
-```
-
-Both flags true (~15s after launch) = the whole chain works.
+The Terrain & Texture Painter tool is described in [USAGE_TerrainPainter.md](../USAGE_TerrainPainter.md).
