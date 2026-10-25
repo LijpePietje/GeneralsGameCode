@@ -4118,6 +4118,10 @@ LRESULT CMainFrame::OnWbSetGroup(WPARAM wParam, LPARAM lParam)
 	return 0;
 }
 
+// TheSuperHackers @bugfix Nemellud 25/10/2026 EmbeddedMode: the UI calls this by itself after every
+// New and Open, so on a map without the skirmish players it made an untouched map "modified" and the
+// UI then asked "Save changes?" about work nobody did. The players are added again on the next open,
+// so not saving them loses nothing: a map that was clean stays clean.
 LRESULT CMainFrame::OnWbAddSkirmish(WPARAM wParam, LPARAM lParam)
 {
 	// TheSuperHackers @feature Nemellud 30/05/2026 EmbeddedMode: add standard skirmish players + validateSides
@@ -4172,7 +4176,10 @@ LRESULT CMainFrame::OnWbAddSkirmish(WPARAM wParam, LPARAM lParam)
 	// (the old code always ran validateSides on TheSidesList directly)
 	Bool fixed = newSides.validateSides();
 	if (added > 0 || fixed) {
+		CWorldBuilderDoc* pDoc = (CWorldBuilderDoc*)GetActiveDocument();
+		BOOL wasModified = pDoc ? pDoc->IsModified() : TRUE;
 		MF_CommitSidesUndoable(newSides);
+		if (!wasModified) pDoc->SetModifiedFlag(FALSE);
 	}
 
 	if (responseBuf)
