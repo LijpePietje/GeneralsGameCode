@@ -144,6 +144,8 @@ public:
 	void syncViewCenters(Real x, Real y);
 
 	Bool needAutoSave() {return m_needAutosave;};
+	// TheSuperHackers @bugfix Nemellud 25/10/2026 EmbeddedMode: for pipe edits that bypass AddAndDoUndoable
+	void setNeedAutoSave() { m_needAutosave = true; }
 
 	Int getNextWaypointID() { return ++m_curWaypointID;};
 

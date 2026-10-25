@@ -417,6 +417,10 @@ struct WbPlantGroveReq {
 // placed without one - could not be addressed at all, not to edit and not to delete.
 #define WM_WB_SELECT_OBJECT_AT  (WM_USER + 221)  // sync: select nearest object to a world position
 #define WM_WB_GET_SEL_TRIGGER   (WM_USER + 222)  // sync: the polygon trigger under the polygon tool
+// TheSuperHackers @bugfix Nemellud 25/10/2026 EmbeddedMode: many pipe edits (players, teams, scripts,
+// triggers, height_set, Painter actions) change the map without an Undoable, and only an Undoable
+// marks the document modified - so "save changes?" and the autosave never knew about that work.
+#define WM_WB_MARK_MODIFIED     (WM_USER + 223)  // sync: mark the map changed (modified flag + autosave)
 
 // Shared data structures for Tier I (written by pipe thread, read by main thread via SendMessage)
 struct WbHeightRect {

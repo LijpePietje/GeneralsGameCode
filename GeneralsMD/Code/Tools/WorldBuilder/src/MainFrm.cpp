@@ -155,6 +155,7 @@ BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
 	ON_MESSAGE(WM_WB_GET_WAYPOINTS,   OnWbGetWaypoints)
 	ON_MESSAGE(WM_WB_GET_TRIGGERS,    OnWbGetTriggers)
 	ON_MESSAGE(WM_WB_GET_SEL_TRIGGER, OnWbGetSelTrigger)
+	ON_MESSAGE(WM_WB_MARK_MODIFIED,   OnWbMarkModified)
 	ON_MESSAGE(WM_WB_GET_TEAMS,       OnWbGetTeams)
 	ON_MESSAGE(WM_WB_GET_SELECTED,    OnWbGetSelected)
 	ON_MESSAGE(WM_WB_SF_CREATE_PIPE,   OnWbSfCreatePipe)
@@ -1853,6 +1854,18 @@ LRESULT CMainFrame::OnWbGetWaypoints(WPARAM wParam, LPARAM lParam)
 	}
 	if (pos < maxLen - 2) { buf[pos++] = ']'; buf[pos++] = '}'; buf[pos] = '\0'; }
 	return 0;
+}
+
+// TheSuperHackers @bugfix Nemellud 25/10/2026 EmbeddedMode: the API marks the map changed after an
+// edit that went past the undo list, so the modified flag and the autosave cover all work, not
+// only the edits that happen to be Undoables. See WM_WB_MARK_MODIFIED.
+LRESULT CMainFrame::OnWbMarkModified(WPARAM, LPARAM)
+{
+	CWorldBuilderDoc* pDoc = (CWorldBuilderDoc*)GetActiveDocument();
+	if (!pDoc) return 0;
+	pDoc->SetModifiedFlag(TRUE);
+	pDoc->setNeedAutoSave();
+	return 1;
 }
 
 // TheSuperHackers @feature Nemellud 25/05/2026 EmbeddedMode: return all polygon triggers as JSON for pipe

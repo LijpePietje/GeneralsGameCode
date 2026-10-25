@@ -539,6 +539,12 @@ bool WbPipeServer::DispatchCommand(const char* json, HWND hwnd,
 		writeSaveResult(responseBuf, responseBufLen, r);
 		return (r == WB_SAVE_OK);
 	}
+	// TheSuperHackers @bugfix Nemellud 25/10/2026 EmbeddedMode: see WM_WB_MARK_MODIFIED
+	if (strcmp(cmd, "mark_modified") == 0) {
+		LRESULT r = SendMessage(hwnd, WM_WB_MARK_MODIFIED, 0, 0);
+		_snprintf(responseBuf, responseBufLen, r ? "{\"ok\":true}" : "{\"ok\":false,\"error\":\"no map\"}");
+		return (r != 0);
+	}
 	// TheSuperHackers @feature Nemellud 10/06/2026 EmbeddedMode: save to explicit path (no dialog)
 	if (strcmp(cmd, "save_to") == 0) {
 		char path[MAX_PATH] = "";
